@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch index.js",
-    "start": "node index.js"
+    "start": "node index.js",
+    "//build": "Only for a host whose root directory is this folder. Builds the client next door, which index.js then serves. From the repo root use the root package.json instead.",
+    "build": "npm install --include=dev --prefix ../client && npm run build --prefix ../client"
   },
   "dependencies": {
     "cors": "^2.8.5",
