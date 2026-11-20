@@ -3,6 +3,8 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import { complete, parseJson, estimateCost, listModels } from './lib/openai.js';
 import { SYSTEM_PROMPT, buildUserPrompt, buildRevisePrompt } from './lib/prompt.js';
@@ -16,6 +18,8 @@ import { chat, image, createImage, editImage, imageCost, parseIntent }
 import * as usage from './lib/usage.js';
 
 const app = express();
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+// Render and most hosts hand the port in through the environment.
 const PORT = process.env.PORT || 5174;
 
 app.use(cors());
@@ -430,6 +434,21 @@ app.delete('/api/usage', (_req, res) => {
   usage.reset();
   res.json({ ok: true });
 });
+
+/* ---------------------------------------------------------------- the app
+   In development the client runs on Vite's own server and proxies /api
+   here. Deployed, there is one process: this server also hands out the
+   built client, so the browser calls /api on its own origin and no CORS
+   or base-URL configuration is needed anywhere. */
+const CLIENT_DIST = path.resolve(HERE, '..', 'client', 'dist');
+
+if (fs.existsSync(CLIENT_DIST)) {
+  app.use(express.static(CLIENT_DIST));
+  // Anything that is not an API route is the single-page app.
+  app.get(/^(?!\/api\/).*/, (_req, res) => {
+    res.sendFile(path.join(CLIENT_DIST, 'index.html'));
+  });
+}
 
 app.listen(PORT, () => {
   const model = process.env.OPENAI_MODEL || 'gpt-6-luna';

@@ -1,0 +1,19 @@
+# Render blueprint. The dashboard settings must match this: in particular
+# Root Directory has to be EMPTY -- the build needs both client/ and
+# server/, so it runs from the repository root.
+services:
+  - type: web
+    name: paper-studio
+    runtime: node
+    plan: free
+    branch: master
+    buildCommand: npm run build
+    startCommand: npm start
+    healthCheckPath: /api/themes
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false          # set this in the dashboard, never in the repo
+      - key: OPENAI_MODEL
+        value: gpt-6-luna
+      - key: NODE_VERSION
+        value: "20"

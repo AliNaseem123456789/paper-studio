@@ -523,6 +523,41 @@ the usual way a chat loop quietly burns through a TPM limit. The budget is
 3000 approximate tokens; raise it in `trimHistory` if replies start losing
 earlier context.
 
+## Deploying
+
+One process serves everything: the server hands out `client/dist` and answers
+`/api` on the same origin, so there is no CORS and no API base URL to
+configure. Locally nothing changes — Vite still proxies `/api` to the server.
+
+On Render, as one Web Service:
+
+| Setting | Value |
+| --- | --- |
+| Root Directory | **empty** |
+| Build Command | `npm run build` |
+| Start Command | `npm start` |
+| Health Check Path | `/api/themes` |
+
+Root Directory is the one that bites. Set it to `client` and the build runs
+inside the client folder, where there is no server to start. The build needs
+both halves, so it has to run from the repository root. `render.yaml` carries
+the same settings for a Blueprint deploy.
+
+Environment variables: `OPENAI_API_KEY` (required), `OPENAI_MODEL` (optional,
+defaults to `gpt-6-luna`). Never commit either.
+
+The root `package.json` installs the client with `--include=dev` on purpose.
+Hosts commonly set `NODE_ENV=production`, npm then skips devDependencies, and
+the build dies on a missing Vite.
+
+**The free instance has no persistent disk.** Uploaded icons under
+`server/assets/` and the usage ledger are gone on every deploy and on every
+restart, and a free service sleeps after about 15 minutes idle, so the first
+request afterwards takes the better part of a minute. The school monogram is
+safe because it ships in the repo under `server/brand/`. Teacher uploads are
+not: for those, attach a Render persistent disk or push them to object
+storage. Saved drafts live in the browser, so they survive regardless.
+
 ## Notes
 
 - The API key stays on the server and is never sent to the browser.
