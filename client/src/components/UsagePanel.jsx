@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api.js';
 import React, { useEffect, useState } from 'react';
 
 const money = (v) => (v == null ? '—' : `$${v < 0.01 ? v.toFixed(5) : v.toFixed(4)}`);
@@ -9,7 +10,7 @@ export default function UsagePanel({ refreshKey, onClose }) {
 
   async function load() {
     try {
-      const res = await fetch('/api/usage');
+      const res = await apiFetch('/api/usage');
       setData(await res.json());
     } catch (err) {
       setError(err.message);
@@ -19,7 +20,7 @@ export default function UsagePanel({ refreshKey, onClose }) {
   useEffect(() => { load(); }, [refreshKey]);
 
   async function reset() {
-    await fetch('/api/usage', { method: 'DELETE' });
+    await apiFetch('/api/usage', { method: 'DELETE' });
     load();
   }
 

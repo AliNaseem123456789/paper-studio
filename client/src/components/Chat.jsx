@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api.js';
 import React, { useEffect, useRef, useState } from 'react';
 
 const STORE = 'paper-studio:chat';
@@ -99,7 +100,7 @@ export default function Chat({ onUsage }) {
       ));
       sending.forEach((f) => form.append('images', f));
 
-      const res = await fetch('/api/chat', { method: 'POST', body: form });
+      const res = await apiFetch('/api/chat', { method: 'POST', body: form });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || 'Chat failed');
 

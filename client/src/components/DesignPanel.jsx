@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api.js';
 import React, { useEffect, useState } from 'react';
 import { BORDER_PATTERNS, ICON_SETS, tileUrl } from './blocks/borders.jsx';
 
@@ -36,7 +37,7 @@ export default function DesignPanel({ doc, setDoc, themes, borders }) {
   const [templates, setTemplates] = useState([]);
 
   useEffect(() => {
-    fetch('/api/templates')
+    apiFetch('/api/templates')
       .then((r) => r.json())
       .then((b) => setTemplates(b.list || []))
       .catch(() => {});
@@ -52,7 +53,7 @@ export default function DesignPanel({ doc, setDoc, themes, borders }) {
     setDoc((d) => ({ ...d, overrides: { ...(d.overrides || {}), border: b } }));
 
   async function applyTemplate(id) {
-    const res = await fetch(`/api/templates/${id}`);
+    const res = await apiFetch(`/api/templates/${id}`);
     const body = await res.json();
     if (!res.ok) return;
     // Keep the teacher's content; take the template's look and page setup.

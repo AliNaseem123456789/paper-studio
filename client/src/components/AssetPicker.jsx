@@ -1,3 +1,4 @@
+import { apiFetch, apiUrl } from '../lib/api.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 /**
@@ -16,7 +17,7 @@ export default function AssetPicker({ onPick, onClose, onLibraryChange }) {
 
   async function load() {
     try {
-      const r = await fetch('/api/assets');
+      const r = await apiFetch('/api/assets');
       const b = await r.json();
       setAll(b.assets || []);
       onLibraryChange?.(b.assets || []);
@@ -44,7 +45,7 @@ export default function AssetPicker({ onPick, onClose, onLibraryChange }) {
       const form = new FormData();
       Array.from(files).slice(0, 40).forEach((f) => form.append('files', f));
       form.append('group', 'custom');
-      const r = await fetch('/api/assets', { method: 'POST', body: form });
+      const r = await apiFetch('/api/assets', { method: 'POST', body: form });
       const b = await r.json();
       if (!r.ok) throw new Error(b.error || 'Upload failed');
       await load();
@@ -61,7 +62,7 @@ export default function AssetPicker({ onPick, onClose, onLibraryChange }) {
     if (!prompt.trim()) return;
     setBusy(true); setError('');
     try {
-      const r = await fetch('/api/assets/generate', {
+      const r = await apiFetch('/api/assets/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
@@ -80,7 +81,7 @@ export default function AssetPicker({ onPick, onClose, onLibraryChange }) {
 
   async function remove(id, e) {
     e.stopPropagation();
-    await fetch(`/api/assets/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    await apiFetch(`/api/assets/${encodeURIComponent(id)}`, { method: 'DELETE' });
     load();
   }
 
@@ -123,7 +124,7 @@ export default function AssetPicker({ onPick, onClose, onLibraryChange }) {
                         onClick={() => { onPick?.(a.id); onClose?.(); }}
                       >
                         {a.url
-                          ? <img src={a.url} alt={a.label} />
+                          ? <img src={apiUrl(a.url)} alt={a.label} />
                           : <span className="cell-glyph">{a.glyph}</span>}
                         <span className="cell-label">{a.label}</span>
                         {a.kind !== 'builtin' && (

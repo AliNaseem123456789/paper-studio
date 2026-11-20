@@ -1,3 +1,4 @@
+import { apiUrl } from '../../lib/api.js';
 import React, { createContext, useContext } from 'react';
 import { RENDERERS as Q } from '../questions/Renderers.jsx';
 import ShapeSvg from './Shape.jsx';
@@ -17,7 +18,9 @@ export function Asset({ id, generate, src, assets, size = '12mm', fallbackGlyph 
   const a = id ? lib?.[id] : null;
 
   if (src) return <img className="asset-img" src={src} alt="" style={{ height: size }} />;
-  if (a?.url) return <img className="asset-img" src={a.url} alt={a.label} style={{ height: size }} />;
+  // The server gives asset URLs as server paths, so they need the same base
+  // as the API calls when the client is hosted apart from the server.
+  if (a?.url) return <img className="asset-img" src={apiUrl(a.url)} alt={a.label} style={{ height: size }} />;
   if (a?.glyph) return <span className="asset-glyph" style={{ fontSize: size }}>{a.glyph}</span>;
   // v1 documents stored a bare emoji rather than a slug.
   if (fallbackGlyph) return <span className="asset-glyph" style={{ fontSize: size }}>{fallbackGlyph}</span>;

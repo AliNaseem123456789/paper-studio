@@ -1,3 +1,4 @@
+import { apiFetch } from './lib/api.js';
 import React, { useEffect, useRef, useState } from 'react';
 import Composer from './components/Composer.jsx';
 import Editor from './components/Editor.jsx';
@@ -125,7 +126,7 @@ export default function App() {
 
   async function loadSyllabusTemplate() {
     try {
-      const res = await fetch('/api/templates/syllabus-alsehar');
+      const res = await apiFetch('/api/templates/syllabus-alsehar');
       const body = await res.json();
       if (res.ok) { setSyllabus(ensureIds(body.doc)); setView('layout'); }
     } catch { /* the Create tab still works */ }
@@ -134,7 +135,7 @@ export default function App() {
   // The whole library, fetched once. Documents reference assets by slug, so
   // this is what turns "animal.lion" into something drawable.
   useEffect(() => {
-    fetch('/api/assets')
+    apiFetch('/api/assets')
       .then((r) => r.json())
       .then((b) => {
         const map = {};
@@ -153,7 +154,7 @@ export default function App() {
   }, [tool]);
 
   useEffect(() => {
-    fetch('/api/themes')
+    apiFetch('/api/themes')
       .then((r) => r.json())
       .then((b) => { setThemes(b.tokens); setBorders(b.borders); })
       .catch(() => {});
@@ -180,7 +181,7 @@ export default function App() {
       form.append('idea', idea || '');
       form.append('kind', mode === 'syllabus' ? 'syllabus' : 'exam');
 
-      const res = await fetch('/api/generate', { method: 'POST', body: form });
+      const res = await apiFetch('/api/generate', { method: 'POST', body: form });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || 'Something went wrong');
 
@@ -200,7 +201,7 @@ export default function App() {
     setBusy(true);
     setError('');
     try {
-      const res = await fetch('/api/revise', {
+      const res = await apiFetch('/api/revise', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ doc: active, instruction }),
@@ -331,7 +332,7 @@ export default function App() {
     setError('');
     setFillNote('');
     try {
-      const res = await fetch('/api/assets/fill', {
+      const res = await apiFetch('/api/assets/fill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompts: pendingPrompts }),
