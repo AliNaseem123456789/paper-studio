@@ -4,42 +4,61 @@ import React from 'react';
  * Teacher-facing editing. Deliberately plain: every field is a text input that
  * writes straight back into the paper spec, so the preview updates as you type.
  */
-export default function Editor({ paper, setPaper, onRevise, busy }) {
+export default function Editor({ doc, setDoc, onRevise, busy }) {
+  // The editor works on page 0's question blocks. Other block types are
+  // edited on the sheet itself (and in the Design tab).
+  const page = doc.pages[0] || { blocks: [] };
+  const questions = page.blocks
+    .map((b, i) => ({ b, i }))
+    .filter(({ b }) => b.type === 'question');
+
+  const writeBlocks = (fn) =>
+    setDoc((d) => {
+      const pages = [...d.pages];
+      pages[0] = { ...pages[0], blocks: fn([...pages[0].blocks]) };
+      return { ...d, pages };
+    });
+
   const [instruction, setInstruction] = React.useState('');
 
-  function patchPaper(key, value) {
-    setPaper((p) => ({ ...p, [key]: value }));
+  function patchMeta(key, value) {
+    setDoc((d) => ({ ...d, meta: { ...d.meta, [key]: value } }));
   }
 
-  function patchQuestion(qi, patch) {
-    setPaper((p) => {
-      const questions = [...p.questions];
-      questions[qi] = { ...questions[qi], ...patch };
-      return { ...p, questions };
+  /** bi = index into page.blocks (not into the filtered question list). */
+  function patchBlock(bi, patch) {
+    writeBlocks((bs) => {
+      bs[bi] = { ...bs[bi], ...patch };
+      return bs;
     });
   }
 
-  function patchItem(qi, ii, patch) {
-    setPaper((p) => {
-      const questions = [...p.questions];
-      const items = [...(questions[qi].items || [])];
+  function patchContent(bi, patch) {
+    writeBlocks((bs) => {
+      bs[bi] = { ...bs[bi], content: { ...bs[bi].content, ...patch } };
+      return bs;
+    });
+  }
+
+  function patchItem(bi, ii, patch) {
+    writeBlocks((bs) => {
+      const items = [...(bs[bi].content.items || [])];
       items[ii] = { ...items[ii], ...patch };
-      questions[qi] = { ...questions[qi], items };
-      return { ...p, questions };
+      bs[bi] = { ...bs[bi], content: { ...bs[bi].content, items } };
+      return bs;
     });
   }
 
-  function removeQuestion(qi) {
-    setPaper((p) => ({ ...p, questions: p.questions.filter((_, i) => i !== qi) }));
+  function removeBlock(bi) {
+    writeBlocks((bs) => bs.filter((_, i) => i !== bi));
   }
 
-  function move(qi, dir) {
-    setPaper((p) => {
-      const qs = [...p.questions];
-      const j = qi + dir;
-      if (j < 0 || j >= qs.length) return p;
-      [qs[qi], qs[j]] = [qs[j], qs[qi]];
-      return { ...p, questions: qs };
+  function move(bi, dir) {
+    writeBlocks((bs) => {
+      const j = bi + dir;
+      if (j < 0 || j >= bs.length) return bs;
+      [bs[bi], bs[j]] = [bs[j], bs[bi]];
+      return bs;
     });
   }
 
@@ -50,23 +69,23 @@ export default function Editor({ paper, setPaper, onRevise, busy }) {
         {['school', 'title', 'class', 'subject', 'duration'].map((k) => (
           <label key={k}>
             {k[0].toUpperCase() + k.slice(1)}
-            <input value={paper[k] || ''} onChange={(e) => patchPaper(k, e.target.value)} />
+            <input value={doc.meta[k] || ''} onChange={(e) => patchMeta(k, e.target.value)} />
           </label>
         ))}
         <label>
           Total marks
           <input
             type="number"
-            value={paper.totalMarks ?? ''}
-            onChange={(e) => patchPaper('totalMarks', e.target.value ? Number(e.target.value) : null)}
+            value={doc.meta.totalMarks ?? ''}
+            onChange={(e) => patchMeta('totalMarks', e.target.value ? Number(e.target.value) : null)}
           />
         </label>
       </div>
       <label className="full">
         Instructions
         <input
-          value={paper.instructions || ''}
-          onChange={(e) => patchPaper('instructions', e.target.value)}
+          value={doc.meta.instructions || ''}
+          onChange={(e) => patchMeta('instructions', e.target.value)}
         />
       </label>
 
@@ -92,13 +111,15 @@ export default function Editor({ paper, setPaper, onRevise, busy }) {
         </button>
       </div>
 
-      <h2 className="panel-title">Questions ({paper.questions.length})</h2>
-      {paper.questions.map((q, qi) => (
-        <details className="qedit" key={q.id}>
+      <h2 className="panel-title">Questions ({questions.length})</h2>
+      {questions.map(({ b, i: bi }) => {
+        const q = b.content;
+        return (
+        <details className="qedit" key={b.id}>
           <summary>
             <span className="qedit-num">{q.number}</span>
-            <span className="qedit-label">{q.instruction || q.type}</span>
-            <span className="qedit-type">{q.type.replace(/_/g, ' ')}</span>
+            <span className="qedit-label">{q.instruction || q.qtype}</span>
+            <span className="qedit-type">{String(q.qtype).replace(/_/g, ' ')}</span>
           </summary>
 
           <div className="qedit-body">
@@ -106,13 +127,13 @@ export default function Editor({ paper, setPaper, onRevise, busy }) {
               Instruction
               <input
                 value={q.instruction}
-                onChange={(e) => patchQuestion(qi, { instruction: e.target.value })}
+                onChange={(e) => patchContent(bi, { instruction: e.target.value })}
               />
             </label>
             <div className="fields">
               <label>
                 Number
-                <input value={q.number} onChange={(e) => patchQuestion(qi, { number: e.target.value })} />
+                <input value={q.number} onChange={(e) => patchContent(bi, { number: e.target.value })} />
               </label>
               <label>
                 Marks
@@ -120,15 +141,15 @@ export default function Editor({ paper, setPaper, onRevise, busy }) {
                   type="number"
                   value={q.marks ?? ''}
                   onChange={(e) =>
-                    patchQuestion(qi, { marks: e.target.value ? Number(e.target.value) : null })
+                    patchContent(bi, { marks: e.target.value ? Number(e.target.value) : null })
                   }
                 />
               </label>
               <label>
                 Language
                 <select
-                  value={q.language || 'en'}
-                  onChange={(e) => patchQuestion(qi, { language: e.target.value })}
+                  value={b.language || 'en'}
+                  onChange={(e) => patchBlock(bi, { language: e.target.value })}
                 >
                   <option value="en">English</option>
                   <option value="ur">اردو</option>
@@ -143,7 +164,7 @@ export default function Editor({ paper, setPaper, onRevise, busy }) {
                   value={it.text ?? it.label ?? ''}
                   placeholder="question text"
                   onChange={(e) =>
-                    patchItem(qi, ii, it.text !== undefined
+                    patchItem(bi, ii, it.text !== undefined
                       ? { text: e.target.value }
                       : { label: e.target.value })
                   }
@@ -152,21 +173,22 @@ export default function Editor({ paper, setPaper, onRevise, busy }) {
                   className="ans"
                   value={it.answer || ''}
                   placeholder="answer"
-                  onChange={(e) => patchItem(qi, ii, { answer: e.target.value })}
+                  onChange={(e) => patchItem(bi, ii, { answer: e.target.value })}
                 />
               </div>
             ))}
 
             <div className="qedit-actions">
-              <button className="link-btn" onClick={() => move(qi, -1)}>↑ Up</button>
-              <button className="link-btn" onClick={() => move(qi, 1)}>↓ Down</button>
-              <button className="link-btn danger" onClick={() => removeQuestion(qi)}>
+              <button className="link-btn" onClick={() => move(bi, -1)}>↑ Up</button>
+              <button className="link-btn" onClick={() => move(bi, 1)}>↓ Down</button>
+              <button className="link-btn danger" onClick={() => removeBlock(bi)}>
                 Remove
               </button>
             </div>
           </div>
         </details>
-      ))}
+        );
+      })}
     </div>
   );
 }

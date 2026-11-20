@@ -1,216 +1,299 @@
-/* The printed paper. Everything here is sized in mm so the screen preview and
-   the printed sheet are the same object. */
+/* The printed sheet. Everything is driven by theme tokens set as CSS custom
+   properties on .sheet, so switching a theme never touches content. */
+
+.sheet-stack { display: flex; flex-direction: column; gap: 14px; align-items: center; }
 
 .sheet {
+  /* Fallbacks; the theme overrides these inline. */
   --ink: #16181d;
+  --accent: #1a5fb4;
+  --accent2: #0b5fa5;
+  --paper: #fff;
   --rule: #2b2b2b;
-  --accent: #0b5fa5;
+  --muted: #5a5f66;
+  --radius: 2mm;
+  --pad: 14mm;
+  --borderColor: #2b2b2b;
+  --headFont: "Inter", system-ui, sans-serif;
+  --bodyFont: "Inter", system-ui, sans-serif;
   --urdu: "Jameel Noori Nastaleeq", "Noto Nastaliq Urdu", serif;
-  --latin: "Inter", "Segoe UI", system-ui, sans-serif;
 
   width: 210mm;
   min-height: 297mm;
-  padding: 13mm 15mm 18mm;
-  background: #fff;
+  padding: var(--pad);
+  background: var(--paper);
   color: var(--ink);
-  font-family: var(--latin);
+  font-family: var(--bodyFont);
   font-size: 11pt;
   position: relative;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .08), 0 12px 32px rgba(0, 0, 0, .12);
-  margin: 0 auto;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 12px 32px rgba(0,0,0,.12);
+  overflow: hidden;
 }
 
-.sheet.decorated { padding: 20mm 18mm 20mm; }
+/* ---------------------------------------------------------- border styles */
+.sheet.border-hairline { border: 1.2pt solid var(--borderColor); }
+.sheet.border-double   { border: 3.5pt double var(--borderColor); }
+.sheet.border-frame    { border: 5mm solid var(--borderColor); padding: calc(var(--pad) - 2mm); }
+.sheet.border-icons,
+.sheet[class*="border-icons-"] { padding: calc(var(--pad) + 6mm); }
+/* Drawn patterns need the same clearance as the icon strip. */
+.sheet.border-pattern  { padding: calc(var(--pad) + 5mm); }
+.sheet.border-corners  { border: 0.8pt solid var(--borderColor); }
+.sheet.border-none     { border: 0; }
 
 .sheet-frame { position: absolute; inset: 0; pointer-events: none; }
-.sheet-frame span {
+.sheet-frame.icons span {
   position: absolute;
-  font-size: 7mm;
+  font-size: 7mm; line-height: 1;
+  font-family: "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif;
+}
+.sheet-frame.corners .c {
+  position: absolute; width: 16mm; height: 16mm;
+  border: 2.2pt solid var(--accent2);
+}
+.corners .tl { top: 4mm; inset-inline-start: 4mm; border-width: 2.2pt 0 0 2.2pt; }
+.corners .tr { top: 4mm; inset-inline-end: 4mm; border-width: 2.2pt 2.2pt 0 0; }
+.corners .bl { bottom: 4mm; inset-inline-start: 4mm; border-width: 0 0 2.2pt 2.2pt; }
+.corners .br { bottom: 4mm; inset-inline-end: 4mm; border-width: 0 2.2pt 2.2pt 0; }
+
+/* --------------------------------------------------------------- header */
+.sheet-head { text-align: var(--headAlign, center); }
+.sheet-school {
+  font-family: var(--headFont);
+  font-size: 20pt; font-weight: 700; margin: 0; color: var(--accent);
+}
+.sheet-title { font-size: 13pt; margin: 2mm 0 0; color: var(--ink); }
+
+.sheet-meta {
+  display: flex; justify-content: space-between; gap: 6mm; flex-wrap: wrap;
+  font-size: 11pt; font-weight: 500; margin: 5mm 0 2mm; padding-bottom: 2mm;
+}
+.sheet-rule { border: 0; border-top: 1.5pt solid var(--rule); margin: 0 0 2mm; }
+.sheet-note {
+  font-size: 9.5pt; padding: 1.5mm 0 2.5mm;
+  border-bottom: 1.5pt solid var(--rule); margin-bottom: 7mm;
+}
+.answer-flag { color: var(--accent2); font-weight: 600; }
+
+.sheet-foot {
+  position: absolute; inset-inline: var(--pad); bottom: 8mm;
+  display: flex; justify-content: space-between; font-size: 9pt; color: var(--muted);
+}
+.goodluck {
+  border: 1.2pt solid var(--rule); border-radius: var(--radius);
+  padding: 1mm 3mm; font-weight: 600; color: var(--ink);
+}
+
+/* ----------------------------------------------------------- canvas grid */
+.grid-page { position: relative; min-height: 240mm; }
+/* The cell itself must NOT clip: the resize handles sit outside its box and
+   would stop receiving pointer events. Clipping happens on the block inside,
+   which is what keeps an overgrown panel from colliding with its neighbour. */
+.grid-cell { position: absolute; padding: 1.5mm; }
+.grid-cell > .blk { overflow: hidden; height: 100%; }
+.grid-cell > .blk { height: 100%; }
+
+/* --------------------------------------------------------------- blocks */
+.blk { margin-bottom: 5mm; }
+.grid-cell .blk { margin-bottom: 0; }
+
+.blk.rtl {
+  direction: rtl; text-align: right;
+  font-family: var(--urdu); line-height: 2.1;
+}
+
+.blk-heading { font-family: var(--headFont); margin: 0 0 2mm; color: var(--accent); }
+.blk-heading.lvl1 { font-size: 17pt; }
+.blk-heading.lvl2 { font-size: 14pt; }
+.blk-heading.lvl3 { font-size: 12pt; }
+.blk-heading.lvl4 { font-size: 11pt; }
+
+.blk-text { margin: 0 0 2mm; line-height: 1.65; }
+.blk.rtl .blk-text { line-height: 2.2; }
+
+.blk-divider { border: 0; border-top: 1pt solid var(--rule); margin: 3mm 0; }
+
+.blk-lines { display: flex; flex-direction: column; gap: 6mm; margin: 3mm 0; }
+.rule-line { display: block; border-bottom: 1pt solid var(--rule); height: 0; }
+
+/* lists */
+.blk-list-title { font-weight: 600; margin-bottom: 1.5mm; color: var(--accent2); }
+.blk-list ul, .blk-list ol { margin: 0; padding-inline-start: 5mm; }
+.blk-list li {
+  margin-bottom: 0.9mm; line-height: 1.4;
+  display: flex; align-items: baseline; gap: 1.5mm;
+}
+.blk-section-body .blk-table { font-size: 8.2pt; }
+.blk-section-body .blk-table th,
+.blk-section-body .blk-table td { padding: 0.9mm 1.4mm; }
+.blk.rtl .blk-list li { line-height: 2.1; }
+
+/* tables */
+.blk-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+.blk-table th, .blk-table td {
+  border: 0.8pt solid var(--rule); padding: 1.5mm 2mm; text-align: start;
+}
+.blk-table th { background: color-mix(in srgb, var(--accent) 12%, white); font-weight: 600; }
+
+/* coloured section panels */
+.blk-section {
+  border-radius: var(--radius);
+  overflow: hidden;
+  height: 100%;
+}
+.sec-outlined .blk-section { border: 1.5pt solid var(--sec); }
+.sec-flat     .blk-section { border: 1pt solid var(--rule); }
+.sec-shadow   .blk-section { border: 1pt solid color-mix(in srgb, var(--sec) 40%, white);
+                             box-shadow: 0 1mm 3mm rgba(0,0,0,.10); }
+.sec-pill-header .blk-section { border: 1.5pt solid color-mix(in srgb, var(--sec) 35%, white); }
+
+.blk-section-head {
+  background: var(--sec);
+  color: #fff;
+  font-weight: 700;
+  font-size: 10.5pt;
+  padding: 1.6mm 3mm;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+.sec-pill-header .blk-section-head {
+  margin: 1.5mm; border-radius: 10mm; text-align: center; padding: 1.4mm 3mm;
+}
+.sec-flat .blk-section-head { background: transparent; color: var(--sec);
+  border-bottom: 1pt solid var(--sec); text-transform: none; }
+.blk-section-body { padding: 2mm 2.5mm 2.5mm; font-size: 8.6pt; line-height: 1.38; }
+.blk-section-body .blk { margin-bottom: 2mm; }
+
+/* images / assets */
+.asset-img { object-fit: contain; vertical-align: middle; max-width: 100%; }
+.asset-glyph {
   line-height: 1;
   font-family: "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif;
 }
-
-/* ---------------------------------------------------------------- header */
-.sheet-head { text-align: center; }
-.sheet-school {
-  font-size: 19pt;
-  font-weight: 700;
-  margin: 0;
-  letter-spacing: .01em;
+.asset-slot {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1pt dashed var(--muted); border-radius: 1.5mm;
+  color: var(--muted); font-size: 5mm; min-width: 8mm; min-height: 8mm;
 }
-.sheet-title { font-size: 13pt; margin: 2mm 0 0; }
+.blk-image { margin: 0; text-align: center; height: 100%; }
+.blk-image .asset-img { width: 100%; height: 100%; }
+.blk-image.fit-cover .asset-img { object-fit: cover; }
+.blk-image figcaption { font-size: 8.5pt; color: var(--muted); margin-top: 1mm; }
 
-.sheet-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 6mm;
-  flex-wrap: wrap;
-  font-size: 11pt;
-  font-weight: 500;
-  margin: 5mm 0 2mm;
-  padding-bottom: 2mm;
-}
-.sheet-rule { border: 0; border-top: 1.5pt solid var(--rule); margin: 0 0 2mm; }
+/* Shapes are SVG now; see the .shape-box rules further down. The old
+   CSS-border versions of these were drawing a box around every shape. */
 
-.sheet-note {
-  font-size: 9.5pt;
-  padding: 1.5mm 0 2.5mm;
-  border-bottom: 1.5pt solid var(--rule);
-  margin-bottom: 7mm;
-}
-
-/* ------------------------------------------------------------- questions */
-.q { margin-bottom: 7mm; break-inside: avoid; }
+/* ------------------------------------------------------------ questions */
+.blk-question { break-inside: avoid; }
 .q-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 4mm;
-  font-weight: 600;
-  font-size: 11.5pt;
-  margin-bottom: 3mm;
+  display: flex; justify-content: space-between; align-items: baseline; gap: 4mm;
+  font-weight: 600; font-size: 11.5pt; margin-bottom: 3mm;
+  font-family: var(--headFont);
 }
+.blk.rtl .q-head { font-size: 13pt; font-family: var(--urdu); }
+
 .q-marks {
-  flex: 0 0 auto;
-  font-weight: 600;
+  flex: 0 0 auto; font-weight: 600; font-size: 9pt;
   border: 1.2pt solid var(--rule);
-  border-radius: 50%;
-  min-width: 7mm;
-  height: 7mm;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 9pt;
+  min-width: 7mm; height: 7mm;
+  display: inline-flex; align-items: center; justify-content: center;
 }
+.badge-circle .q-marks { border-radius: 50%; }
+.badge-pill   .q-marks { border-radius: 10mm; padding: 0 2mm;
+                         background: var(--accent); color: #fff; border-color: var(--accent); }
+.badge-square .q-marks { border-radius: 0; }
+.badge-none   .q-marks { display: none; }
+
 .q-body { padding-inline-start: 5mm; }
 
-/* Urdu questions flip direction and change font. */
-.rtl {
-  direction: rtl;
-  text-align: right;
-  font-family: var(--urdu);
-  line-height: 2.1;
-}
-.rtl .q-head { font-size: 13pt; }
-
 .item { margin-bottom: 2.5mm; line-height: 1.9; }
-.rtl .item { line-height: 2.3; }
+.blk.rtl .item { line-height: 2.3; }
 .item-num { font-weight: 600; margin-inline-end: 2mm; }
 
 .blank-line {
-  display: inline-block;
-  min-width: 26mm;
+  display: inline-block; min-width: 26mm;
   border-bottom: 1.2pt solid var(--rule);
-  margin: 0 1mm;
-  text-align: center;
-  color: var(--accent);
-  font-weight: 600;
+  margin: 0 1mm; text-align: center;
+  color: var(--accent2); font-weight: 600;
 }
 
-/* MCQ ------------------------------------------------------------------- */
-.mcq-opts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2mm 7mm;
-  padding-inline-start: 6mm;
-  margin-top: 1mm;
-}
+.mcq-opts { display: flex; flex-wrap: wrap; gap: 2mm 7mm;
+            padding-inline-start: 6mm; margin-top: 1mm; }
 .mcq-opt { white-space: nowrap; }
 .mcq-letter { font-weight: 600; margin-inline-end: 1mm; }
-.mcq-opt.correct { color: var(--accent); font-weight: 700; }
+.mcq-opt.correct { color: var(--accent2); font-weight: 700; }
 
-/* Match ----------------------------------------------------------------- */
+/* match the columns --------------------------------------------------- */
 .match {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 2mm 18mm;
-  padding-inline-start: 4mm;
+  gap: 0 20mm;
+  padding-inline: 3mm;
+  margin-top: 1mm;
 }
-.match-col { display: flex; flex-direction: column; gap: 2.5mm; }
+.match-col { display: flex; flex-direction: column; gap: 3mm; }
+
 .match-cell {
   display: flex;
   align-items: center;
-  gap: 2.5mm;
-  min-height: 8mm;
+  gap: 3mm;
+  min-height: 13mm;
 }
-.match-icon { font-size: 7mm; line-height: 1; }
+.match-col.right .match-cell { min-height: 13mm; }
+
+.match-num { font-weight: 600; min-width: 5mm; }
+
+/* The picture sits in its own box so the column reads as a row of pictures
+   rather than a list with decoration. */
+.match-pic {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16mm; height: 12mm;
+  border: 1pt solid #c9cdd4;
+  border-radius: 1.5mm;
+  flex: 0 0 auto;
+}
+.match-word { font-size: 11pt; }
+
 .match-dot {
-  width: 2mm; height: 2mm; border-radius: 50%;
+  width: 2.2mm; height: 2.2mm; border-radius: 50%;
   background: var(--rule); flex: 0 0 auto;
 }
+/* Push the left column's dot to the inner edge so the gap between the two
+   columns is clean space for the child to draw joining lines. */
+.match-col.left .match-dot { margin-inline-start: auto; }
 
-/* Complete the word ------------------------------------------------------ */
+.match-key {
+  margin-top: 3mm; padding-inline: 3mm;
+  color: var(--accent2); font-weight: 600; font-size: 10pt;
+}
+
 .boxes { display: flex; gap: 1.5mm; align-items: center; flex-wrap: wrap; }
-.box {
-  width: 8mm; height: 8mm;
-  border: 1.2pt solid var(--rule);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 11pt;
-}
-.box.filled-answer { color: var(--accent); }
+.box { width: 8mm; height: 8mm; border: 1.2pt solid var(--rule);
+       display: inline-flex; align-items: center; justify-content: center;
+       font-weight: 600; font-size: 11pt; }
+.box.filled-answer { color: var(--accent2); }
 
-/* Pictures --------------------------------------------------------------- */
-.pics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5mm 7mm;
-  padding-inline-start: 4mm;
-  margin-top: 2mm;
-}
-.pic {
-  text-align: center;
-  min-width: 22mm;
-}
+.pics { display: flex; flex-wrap: wrap; gap: 5mm 7mm;
+        padding-inline-start: 4mm; margin-top: 2mm; }
+.pic { text-align: center; min-width: 22mm; }
 .pic-art {
-  font-size: 14mm;
-  line-height: 1.25;
-  border: 1.2pt solid #d4d6db;
-  border-radius: 2mm;
-  padding: 2mm 3mm;
-  display: block;
+  font-size: 14mm; line-height: 1.25;
+  border: 1.2pt solid #d4d6db; border-radius: var(--radius);
+  padding: 2mm 3mm; display: flex; align-items: center; justify-content: center;
+  min-height: 18mm; min-width: 20mm;
 }
-.pic.correct .pic-art { border: 2pt solid var(--accent); }
+.pic.correct .pic-art { border: 2pt solid var(--accent2); }
 .pic-label { font-size: 9pt; margin-top: 1mm; }
-.pic-line {
-  display: block;
-  border-bottom: 1.2pt solid var(--rule);
-  min-width: 22mm;
-  height: 5mm;
-  margin-top: 1mm;
-  color: var(--accent);
-  font-weight: 600;
-  font-size: 9.5pt;
-}
+.pic-line { display: block; border-bottom: 1.2pt solid var(--rule);
+            min-width: 22mm; height: 5mm; margin-top: 1mm;
+            color: var(--accent2); font-weight: 600; font-size: 9.5pt; }
 
-/* Letter practice -------------------------------------------------------- */
-.trace-row {
-  display: flex;
-  gap: 3mm;
-  align-items: center;
-  border-bottom: 1pt dashed #9aa0a6;
-  padding: 1.5mm 0;
-  margin-bottom: 1.5mm;
-}
+.trace-row { display: flex; gap: 3mm; align-items: center;
+             border-bottom: 1pt dashed var(--muted); padding: 1.5mm 0; margin-bottom: 1.5mm; }
 .trace-letter { font-size: 10mm; line-height: 1.4; }
 .trace-ghost { font-size: 10mm; line-height: 1.4; color: #c6c9ce; }
 
-.sheet-foot {
-  position: absolute;
-  left: 15mm; right: 15mm; bottom: 8mm;
-  display: flex;
-  justify-content: space-between;
-  font-size: 9pt;
-  color: #5a5f66;
-}
-.goodluck {
-  border: 1.2pt solid var(--rule);
-  border-radius: 2mm;
-  padding: 1mm 3mm;
-  font-weight: 600;
-}
+.blk-raw { all: revert; }
 
 /* ------------------------------------------------------------------ print */
 @media print {
@@ -218,15 +301,390 @@
   html, body { background: #fff !important; }
   body * { visibility: hidden; }
   .print-root, .print-root * { visibility: visible; }
-  .print-root {
-    position: absolute;
-    inset: 0;
-    margin: 0;
+  .print-root { position: absolute; inset: 0; margin: 0; }
+  .sheet-stack { gap: 0; }
+  .sheet { box-shadow: none; margin: 0; break-after: page; }
+  .sheet:last-child { break-after: auto; }
+}
+
+/* ===================================================== canvas editing ==== */
+/* Everything here is screen-only; the print block below hides all of it. */
+
+.grid-page.editing { outline: 1px dashed #c9cdd4; outline-offset: 2mm; }
+
+.grid-lines { position: absolute; inset: 0; pointer-events: none; }
+.grid-lines span {
+  position: absolute; top: 0; bottom: 0; width: 0;
+  border-inline-start: 1px dashed #e3e6ea;
+}
+
+.grid-cell.editable { cursor: grab; }
+.grid-cell.editable:active { cursor: grabbing; }
+.grid-cell.editable:hover { outline: 1.5px solid #9dc1ef; outline-offset: -1px; }
+.grid-cell.selected { outline: 2px solid #1a5fb4; outline-offset: -1px; }
+
+.mv-handle {
+  position: absolute;
+  width: 11px; height: 11px;
+  background: #fff;
+  border: 2px solid #1a5fb4;
+  border-radius: 2px;
+  z-index: 10;
+}
+.mv-nw { top: -6px; left: -6px; cursor: nwse-resize; }
+.mv-n  { top: -6px; left: 50%; margin-left: -5px; cursor: ns-resize; }
+.mv-ne { top: -6px; right: -6px; cursor: nesw-resize; }
+.mv-e  { top: 50%; right: -6px; margin-top: -5px; cursor: ew-resize; }
+.mv-se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+.mv-s  { bottom: -6px; left: 50%; margin-left: -5px; cursor: ns-resize; }
+.mv-sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
+.mv-w  { top: 50%; left: -6px; margin-top: -5px; cursor: ew-resize; }
+
+.mv-size {
+  position: absolute; top: -22px; inset-inline-start: 0;
+  background: #1a5fb4; color: #fff;
+  font: 500 11px/1 "Inter", system-ui, sans-serif;
+  padding: 3px 6px; border-radius: 4px;
+  pointer-events: none; white-space: nowrap;
+}
+
+.flow-wrap.editable { cursor: pointer; border-radius: 2mm; }
+.flow-wrap.editable:hover { outline: 1.5px solid #9dc1ef; outline-offset: 2px; }
+.flow-wrap.selected { outline: 2px solid #1a5fb4; outline-offset: 2px; }
+
+@media print {
+  .grid-lines, .mv-handle, .mv-size { display: none !important; }
+  .grid-page.editing { outline: 0 !important; }
+  .grid-cell, .flow-wrap { outline: 0 !important; }
+}
+
+/* ================================================== picture slots ======= */
+/* Each picture inside a question is its own target: selectable, replaceable
+   and draggable. All screen-only — print strips every affordance. */
+
+.slot { display: inline-flex; align-items: center; justify-content: center; }
+
+.slot.editable {
+  position: relative;
+  cursor: pointer;
+  border-radius: 1.5mm;
+  outline: 1.5px dashed transparent;
+  outline-offset: 2px;
+  transition: outline-color .12s, background .12s;
+}
+.slot.editable:hover { outline-color: #9dc1ef; background: #eef4fd; }
+.slot.editable:focus-visible { outline: 2px solid #1a5fb4; }
+.slot.selected { outline: 2px solid #1a5fb4; background: #e8f0fb; }
+.slot.dropping { outline: 2px dashed #1a5fb4; background: #dbe8f9; }
+
+.slot-badge {
+  position: absolute;
+  top: -7px; inset-inline-end: -7px;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: #1a5fb4; color: #fff;
+  font: 600 9px/15px "Inter", system-ui, sans-serif;
+  text-align: center;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.slot.editable:hover .slot-badge,
+.slot.selected .slot-badge { opacity: 1; }
+
+/* flow reordering */
+.flow-wrap.editable { position: relative; }
+.flow-wrap .flow-grip {
+  position: absolute;
+  inset-inline-start: -7mm; top: 1mm;
+  color: #9aa0a6; font-size: 13px; cursor: grab;
+  opacity: 0; transition: opacity .12s;
+  user-select: none;
+}
+.flow-wrap.editable:hover .flow-grip { opacity: 1; }
+.flow-wrap .flow-grip:active { cursor: grabbing; }
+.flow-wrap.drop-above { box-shadow: 0 -3px 0 -1px #1a5fb4; }
+.flow-wrap.drop-below { box-shadow: 0 3px 0 -1px #1a5fb4; }
+
+@media print {
+  .slot-badge, .flow-grip { display: none !important; }
+  .slot { outline: 0 !important; background: none !important; }
+  .flow-wrap { box-shadow: none !important; }
+}
+
+/* ============================================== answer spaces ========== */
+/* Where the child writes. Ruled lines, an empty box, squared paper for
+   maths, or dotted guides for early handwriting. */
+
+.blk-lines {
+  display: flex; flex-direction: column;
+  gap: var(--gap, 8mm);
+  margin: 3mm 0;
+}
+.blk-lines.dotted .rule-line { border-bottom-style: dotted; border-bottom-width: 1.4pt; }
+
+.blk-answer { margin: 3mm 0 5mm; }
+.ans-label { font-size: 9pt; color: var(--muted); margin-bottom: 1.5mm; }
+
+.ans-box {
+  border: 1.2pt solid var(--rule);
+  border-radius: var(--radius);
+  width: 100%;
+}
+
+/* Squared paper drawn with gradients, so it scales and prints cleanly. */
+.ans-grid {
+  border: 1.2pt solid var(--rule);
+  border-radius: var(--radius);
+  width: 100%;
+  background-image:
+    repeating-linear-gradient(to right,  #c9cdd4 0 .3pt, transparent .3pt var(--cell, 6mm)),
+    repeating-linear-gradient(to bottom, #c9cdd4 0 .3pt, transparent .3pt var(--cell, 6mm));
+}
+
+.blk-spacer { width: 100%; }
+
+@media print {
+  .ans-grid { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* ===================================================== shapes ========== */
+/* `.shape-box` is the drawn shape; `.blk-shape` is the Block wrapper around
+   it, so they must not share a name. On a canvas page the box fills its grid
+   cell; on a flow page it is given an explicit mm size instead. */
+.shape-box { width: 100%; height: 100%; color: var(--accent); }
+.shape-row { display: flex; width: 100%; margin: 2mm 0; }
+.shape-row .shape-box { flex: 0 0 auto; }
+.shape-svg { width: 100%; height: 100%; display: block; overflow: visible; }
+
+/* =================================================== drawn shapes ====== */
+/* The overlay covers the page's printable area. Shapes drawn here float
+   above the content, so a circle can sit over a word without moving it. */
+
+.draw-layer {
+  position: absolute;
+  inset: var(--pad);
+  pointer-events: none;
+}
+.draw-layer.editable { pointer-events: auto; }
+.draw-layer.drawing { cursor: crosshair; }
+/* Without a tool selected the layer must not swallow clicks meant for the
+   page underneath; only the drawn shapes themselves stay clickable. */
+.draw-layer.editable:not(.drawing) { pointer-events: none; }
+.draw-layer.editable:not(.drawing) .drawn { pointer-events: auto; }
+
+.drawn { position: absolute; color: var(--accent); }
+.drawn .shape-svg { width: 100%; height: 100%; }
+.drawn.editable { cursor: grab; }
+.drawn.editable:active { cursor: grabbing; }
+.drawn.editable:hover { outline: 1.5px dashed #9dc1ef; outline-offset: 3px; }
+.drawn.selected { outline: 1.5px solid #1a5fb4; outline-offset: 3px; }
+
+.drawn-handle {
+  position: absolute; right: -6px; bottom: -6px;
+  width: 11px; height: 11px;
+  background: #fff; border: 2px solid #1a5fb4; border-radius: 2px;
+  cursor: nwse-resize;
+}
+.drawn-size {
+  position: absolute; top: -21px; left: 0;
+  background: #1a5fb4; color: #fff;
+  font: 500 10px/1 "Inter", system-ui, sans-serif;
+  padding: 3px 5px; border-radius: 4px; white-space: nowrap;
+  pointer-events: none;
+}
+
+.band {
+  position: absolute;
+  color: #1a5fb4;
+  opacity: .65;
+  pointer-events: none;
+}
+.band .shape-svg { width: 100%; height: 100%; }
+
+@media print {
+  .draw-layer { pointer-events: none; }
+  .drawn { outline: 0 !important; }
+  .drawn-handle, .drawn-size, .band { display: none !important; }
+}
+
+/* ====================================================== figures ======== */
+/* Large diagrams the child works on. Sized in mm so they print true. */
+
+/* `.figure-box` is the diagram; `.blk-figure` is the Block wrapper, so they
+   must not share a name or the stylesheet hits both. */
+.figure-box { width: 100%; margin: 3mm 0 4mm; color: var(--ink); }
+.fig-svg { width: 100%; height: 100%; display: block; }
+
+/* keyboard ------------------------------------------------------------- */
+.fig-keyboard {
+  display: flex; flex-direction: column;
+  gap: 1.2mm; height: 100%;
+  border: 1.2pt solid var(--rule);
+  border-radius: var(--radius);
+  padding: 1.6mm;
+}
+.kbd-row { display: flex; gap: 1.2mm; flex: 1 1 0; }
+.kbd-key {
+  flex: 1 1 0;
+  border: 1pt solid var(--rule);
+  border-radius: 1mm;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 7.5pt; font-weight: 600;
+  font-family: var(--bodyFont);
+  min-width: 0;
+  overflow: hidden;
+}
+.kbd-key.wide-label { font-size: 5.6pt; font-weight: 500; }
+/* Only used on an answer key; the exercise is colouring these in. */
+.kbd-key.marked { background: #ffe08a; }
+
+/* ten frame ------------------------------------------------------------- */
+.fig-frames { display: flex; gap: 6mm; height: 100%; align-items: center; }
+.ten-frame {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  height: 100%;
+  aspect-ratio: 5 / 2;
+}
+.ten-frame span { border: 1pt solid var(--rule); margin: -0.5pt 0 0 -0.5pt; }
+
+/* tracing --------------------------------------------------------------- */
+.fig-trace {
+  height: 100%;
+  border-top: 1pt solid var(--rule);
+  border-bottom: 1pt solid var(--rule);
+  display: flex; align-items: center;
+  background-image: linear-gradient(to bottom, transparent 49.6%, #c9cdd4 49.6%,
+                                    #c9cdd4 50.4%, transparent 50.4%);
+}
+.trace-ghost-big {
+  font-size: 20mm; line-height: 1; color: #c6c9ce; letter-spacing: .12em;
+  padding-inline-start: 4mm;
+}
+
+@media print {
+  .kbd-key.marked, .fig-trace {
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
-  .sheet {
-    box-shadow: none;
-    margin: 0;
-    width: 210mm;
-    break-after: page;
+}
+
+
+/* ================================================= pattern borders ===== */
+.page-border { position: absolute; inset: 0; pointer-events: none; }
+.page-border > span { display: block; }
+
+@media print {
+  /* Browsers drop background images from print by default; these borders
+     are the decoration, so they have to survive. */
+  .page-border > span {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
+}
+
+/* ===================================================== syllabus ======== */
+/* The masthead is the school's house style: fixed arrangement, only the
+   words and the two side pictures change. */
+
+.blk-masthead { margin-bottom: 4mm; }
+
+.masthead {
+  display: grid;
+  grid-template-columns: 26mm 1fr 34mm;
+  align-items: center;
+  gap: 3mm;
+  padding-bottom: 2mm;
+}
+.mh-monogram { width: 24mm; }
+.monogram-fallback { width: 100%; height: auto; display: block; }
+.mh-monogram .asset-img { width: 100%; height: auto; }
+
+.mh-mid { text-align: center; }
+.mh-school {
+  margin: 0;
+  font-family: var(--headFont);
+  font-size: 26pt;
+  font-weight: 800;
+  letter-spacing: .01em;
+  /* 1.05 cropped the tops of the capitals, because the panel above clips
+     its overflow and the glyph box is taller than that line box. */
+  line-height: 1.2;
+  color: var(--mh);
+}
+
+/* Ribbon: a coloured bar with notched tails, like the printed sheets. */
+.mh-ribbon {
+  display: flex; align-items: stretch; justify-content: center;
+  margin: 2mm 0 2.5mm;
+}
+.mh-ribbon-body {
+  background: #1f7a3d;
+  color: #fff;
+  font-weight: 700;
+  font-size: 11.5pt;
+  letter-spacing: .06em;
+  padding: 1.2mm 6mm;
+}
+.mh-ribbon-tail {
+  width: 5mm;
+  background: #155c2e;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 30% 50%);
+}
+.mh-ribbon-tail.right { transform: scaleX(-1); }
+
+.mh-title {
+  display: flex; align-items: center; justify-content: center;
+  gap: 2.5mm; flex-wrap: wrap;
+}
+.mh-title-main {
+  font-family: var(--headFont);
+  font-size: 22pt; font-weight: 800; color: #b02020;
+  letter-spacing: .01em;
+}
+.mh-for { font-size: 15pt; font-style: italic; color: var(--ink); }
+.mh-pill {
+  background: var(--pill);
+  color: #fff;
+  font-weight: 800;
+  font-size: 15pt;
+  padding: 0.8mm 4mm;
+  border-radius: 2mm;
+}
+
+.mh-spots { display: flex; align-items: center; justify-content: flex-end; gap: 2mm; }
+.spot { display: inline-block; }
+.spot-svg { width: 100%; height: 100%; display: block; }
+
+/* numbered panel heads and panel illustrations */
+.blk-section-head { display: flex; align-items: center; gap: 2.5mm; }
+.sec-num {
+  background: #fff; color: var(--sec);
+  min-width: 6mm; height: 6mm; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9pt; font-weight: 800; flex: 0 0 auto;
+}
+.blk-section-body { position: relative; }
+.sec-spot {
+  float: inline-end;
+  margin: 0 0 1.5mm 2.5mm;
+  shape-outside: margin-box;
+}
+
+/* footer note */
+/* `.notebox` is the box; `.blk-notebox` is the Block wrapper around it, so
+   they must not share a name or both get a border. */
+.notebox {
+  border: 1.2pt dashed var(--accent);
+  border-radius: var(--radius);
+  padding: 2mm 4mm;
+  display: flex; align-items: baseline; gap: 3mm;
+  font-size: 9.5pt;
+  text-align: center;
+  justify-content: center;
+}
+.nb-label {
+  background: var(--accent); color: #fff;
+  font-weight: 700; font-size: 9pt;
+  padding: 0.6mm 3mm; border-radius: 10mm;
+  flex: 0 0 auto;
 }

@@ -1,4 +1,11 @@
 import React from 'react';
+import Slot from '../blocks/Slot.jsx';
+
+/* Every picture is its own Slot: individually selectable, replaceable and
+   draggable. `blockId` identifies the question, `index` the item within it. */
+function Pic({ it, blockId, index, size }) {
+  return <Slot blockId={blockId} index={index} item={it} size={size} />;
+}
 
 /* Splits "Moving air is called ____." into text + blank spans so the answer
    can be dropped in when printing a key. */
@@ -99,41 +106,48 @@ export function TrueFalse({ q, showAnswers }) {
   );
 }
 
-export function Match({ q, showAnswers }) {
+export function Match({ q, blockId, assets, showAnswers }) {
+  // The left column is pictures the child looks at; the right column is the
+  // words. Showing a picture's own word beside it would give the answer
+  // away, so `showLabels` is off unless a teacher turns it on.
+  const showLabels = Boolean(q.showLabels);
+
   return (
     <div className="q-body">
       <div className="match">
-        <div className="match-col">
+        <div className="match-col left">
           {q.left.map((it, i) => (
             <div className="match-cell" key={i}>
-              <span className="item-num">{it.number}.</span>
-              {it.icon && <span className="match-icon">{it.icon}</span>}
-              <span>{it.label}</span>
-              <span className="match-dot" style={{ marginInlineStart: 'auto' }} />
+              <span className="match-num">{it.number}.</span>
+              <span className="match-pic">
+                <Pic it={it} blockId={blockId} index={i} size="11mm" />
+              </span>
+              {showLabels && <span className="match-word">{it.label}</span>}
+              <span className="match-dot" />
             </div>
           ))}
         </div>
-        <div className="match-col">
+
+        <div className="match-col right">
           {q.right.map((it, i) => (
             <div className="match-cell" key={i}>
               <span className="match-dot" />
-              <span>{it.label}</span>
+              <span className="match-word">{it.label}</span>
             </div>
           ))}
         </div>
       </div>
+
       {showAnswers && (
-        <div className="item" style={{ marginTop: '3mm', color: '#0b5fa5' }}>
-          {q.left
-            .map((it) => `${it.number}-${it.label}`)
-            .join('   ')}
+        <div className="match-key">
+          {q.left.map((it) => `${it.number}. ${it.label}`).join('    ')}
         </div>
       )}
     </div>
   );
 }
 
-export function CompleteWord({ q, showAnswers }) {
+export function CompleteWord({ q, blockId, assets, showAnswers }) {
   return (
     <div className="q-body">
       {q.items.map((it, i) => {
@@ -141,7 +155,7 @@ export function CompleteWord({ q, showAnswers }) {
         return (
           <div className="item" key={i} style={{ display: 'flex', alignItems: 'center', gap: '3mm' }}>
             <span className="item-num">{it.number}.</span>
-            {it.icon && <span className="match-icon">{it.icon}</span>}
+            <Pic it={it} blockId={blockId} index={i} size="6mm" />
             <span className="boxes">
               {it.letters.map((ch, j) => (
                 <span className={`box${!ch && showAnswers ? ' filled-answer' : ''}`} key={j}>
@@ -156,7 +170,7 @@ export function CompleteWord({ q, showAnswers }) {
   );
 }
 
-export function CirclePicture({ q, showAnswers }) {
+export function CirclePicture({ q, blockId, assets, showAnswers }) {
   return (
     <div className="q-body">
       {q.items.some((it) => it.text) &&
@@ -175,7 +189,7 @@ export function CirclePicture({ q, showAnswers }) {
             className={`pic${showAnswers && it.answer && it.answer === it.label ? ' correct' : ''}`}
             key={i}
           >
-            <span className="pic-art">{it.icon || '▢'}</span>
+            <span className="pic-art"><Pic it={it} blockId={blockId} index={i} size="12mm" /></span>
             {it.label && <div className="pic-label">{it.label}</div>}
           </div>
         ))}
@@ -184,13 +198,13 @@ export function CirclePicture({ q, showAnswers }) {
   );
 }
 
-export function WriteName({ q, showAnswers }) {
+export function WriteName({ q, blockId, assets, showAnswers }) {
   return (
     <div className="q-body">
       <div className="pics">
         {q.items.map((it, i) => (
           <div className="pic" key={i}>
-            <span className="pic-art">{it.icon || '▢'}</span>
+            <span className="pic-art"><Pic it={it} blockId={blockId} index={i} size="12mm" /></span>
             <span className="pic-line">
               {showAnswers ? it.answer || it.label : ' '}
             </span>

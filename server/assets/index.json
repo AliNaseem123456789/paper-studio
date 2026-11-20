@@ -1,0 +1,96 @@
+{
+  "custom.fb8c2969-570c-495a-a3eb-9773d01d68a8-4e7f": {
+    "id": "custom.fb8c2969-570c-495a-a3eb-9773d01d68a8-4e7f",
+    "kind": "upload",
+    "label": "fb8c2969-570c-495a-a3eb-9773d01d68a8",
+    "file": "custom_fb8c2969-570c-495a-a3eb-9773d01d68a8-4e7f.jpg",
+    "mime": "image/avif",
+    "group": "custom"
+  },
+  "custom.fb8c2969-570c-495a-a3eb-9773d01d68a8-618d": {
+    "id": "custom.fb8c2969-570c-495a-a3eb-9773d01d68a8-618d",
+    "kind": "upload",
+    "label": "fb8c2969-570c-495a-a3eb-9773d01d68a8",
+    "file": "custom_fb8c2969-570c-495a-a3eb-9773d01d68a8-618d.jpg",
+    "mime": "image/avif",
+    "group": "custom"
+  },
+  "custom.oip": {
+    "id": "custom.oip",
+    "kind": "upload",
+    "label": "OIP",
+    "file": "custom_oip.webp",
+    "mime": "image/webp",
+    "group": "custom"
+  },
+  "ai.a-laptop-computer": {
+    "id": "ai.a-laptop-computer",
+    "kind": "ai",
+    "label": "a laptop computer",
+    "file": "ai_a-laptop-computer.png",
+    "mime": "image/png",
+    "group": "ai",
+    "prompt": "a laptop computer"
+  },
+  "ai.a-small-electric-blender": {
+    "id": "ai.a-small-electric-blender",
+    "kind": "ai",
+    "label": "a small electric blender",
+    "file": "ai_a-small-electric-blender.png",
+    "mime": "image/png",
+    "group": "ai",
+    "prompt": "a small electric blender"
+  },
+  "ai.an-electric-stove": {
+    "id": "ai.an-electric-stove",
+    "kind": "ai",
+    "label": "an electric stove",
+    "file": "ai_an-electric-stove.png",
+    "mime": "image/png",
+    "group": "ai",
+    "prompt": "an electric stove"
+  },
+  "custom.fbxcvy": {
+    "id": "custom.fbxcvy",
+    "kind": "upload",
+    "label": "fBXCvy",
+    "file": "custom_fbxcvy.jpg",
+    "mime": "image/jpeg",
+    "group": "custom"
+  },
+  "custom.g19s-gaming-keyboard": {
+    "id": "custom.g19s-gaming-keyboard",
+    "kind": "upload",
+    "label": "g19s-gaming-keyboard",
+    "file": "custom_g19s-gaming-keyboard.jpg",
+    "mime": "image/jpeg",
+    "group": "custom"
+  },
+  "ai.a-hand-drawn-swan": {
+    "id": "ai.a-hand-drawn-swan",
+    "kind": "ai",
+    "label": "A hand-drawn swan",
+    "file": "ai_a-hand-drawn-swan.png",
+    "mime": "image/png",
+    "group": "ai",
+    "prompt": "A hand-drawn swan"
+  },
+  "ai.a-small-bucket": {
+    "id": "ai.a-small-bucket",
+    "kind": "ai",
+    "label": "A small bucket",
+    "file": "ai_a-small-bucket.png",
+    "mime": "image/png",
+    "group": "ai",
+    "prompt": "A small bucket"
+  },
+  "ai.a-pomegranate": {
+    "id": "ai.a-pomegranate",
+    "kind": "ai",
+    "label": "A pomegranate",
+    "file": "ai_a-pomegranate.png",
+    "mime": "image/png",
+    "group": "ai",
+    "prompt": "A pomegranate"
+  }
+}

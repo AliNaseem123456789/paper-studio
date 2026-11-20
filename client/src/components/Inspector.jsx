@@ -1,0 +1,1283 @@
+import React from 'react';
+import { SHAPE_IDS, SHAPES, resolveShape } from './blocks/shapes.js';
+import { ShapeIcon } from './blocks/Shape.jsx';
+import { FIGURE_IDS, FIGURES } from './blocks/Figures.jsx';
+import Spot, { SPOT_IDS, SPOTS } from './blocks/spots.jsx';
+import { DEFAULT_MONOGRAM } from './blocks/Masthead.jsx';
+
+/** Grid of spot illustrations; '' clears the picture. */
+function SpotPicker({ value, onPick, allowNone = true }) {
+  return (
+    <div className="spot-grid">
+      {allowNone && (
+        <button className={!value ? 'spot-btn on' : 'spot-btn'}
+                title="None" onClick={() => onPick('')}>
+          <span className="spot-none">—</span>
+        </button>
+      )}
+      {SPOT_IDS.map((id) => (
+        <button
+          key={id}
+          className={value === id ? 'spot-btn on' : 'spot-btn'}
+          title={SPOTS[id].name}
+          onClick={() => onPick(id)}
+        >
+          <Spot id={id} size={9} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* Page geometry, for working out how tall a panel needs to be.
+   A4 minus the sheet's 14mm margins, over a 12-column grid of 11mm rows. */
+const CONTENT_MM = 210 - 28;
+const ROW_MM = 11;
+
+/**
+ * How many grid rows a panel needs at `w` columns wide. An estimate, not a
+ * measurement: it only has to be close enough that nothing is clipped when
+ * the panels are re-flowed, and the teacher can still drag the handle.
+ */
+function panelRows(block, w) {
+  const colMm = (w / 12) * CONTENT_MM;
+  const items = block.content?.blocks?.find((c) => c.type === 'list')
+    ?.content?.items || [];
+  const size = block.style?.size || 10.5;
+  const charMm = size * 0.5 * 0.3528;              // ~half an em per character
+  const spot = block.content?.spot ? 15 : 0;        // the panel picture
+  const usable = Math.max(14, colMm - 8);           // panel padding
+
+  const lines = (text, width) =>
+    Math.max(1, Math.ceil(String(text || '').length * charMm / width));
+
+  // Title band, which wraps too, then the bullets.
+  let mm = 4 + lines(block.content?.title, usable - 9) * (size * 0.47);
+  items.forEach((it, i) => {
+    // The picture sits top-right, so only the first few lines are narrowed.
+    const width = i < 3 ? usable - spot : usable;
+    mm += lines(it.text ?? it.label, width) * (size * 0.47) + 1.6;
+  });
+  return Math.max(4, Math.ceil((mm + 6) / ROW_MM));
+}
+
+/* Blocks pinned outside the panel grid: the masthead on top, notes below. */
+const TOP = ['masthead'];
+const BOTTOM = ['notebox'];
+
+/**
+ * Lay a canvas page out as a grid: masthead full width on top, the panels
+ * in `cols` equal columns in their present order with each row levelled,
+ * then the footer notes. `heightOf(block, colWidth)` decides a panel's
+ * rows. Drawn shapes are left exactly where they were drawn.
+ */
+function layout(blocks, cols, heightOf) {
+  const w = 12 / cols;
+  const isPanel = (b) => b.type === 'section';
+  const tops = blocks.filter((b) => TOP.includes(b.type));
+  const mid = blocks.filter(isPanel);
+  const bottoms = blocks.filter((b) => BOTTOM.includes(b.type));
+
+  let y = 0;
+  const out = new Map();
+  for (const b of tops) { out.set(b.id, { x: 0, y, w: 12, h: b.h || 4 }); y += b.h || 4; }
+
+  for (let i = 0; i < mid.length; i += cols) {
+    const row = mid.slice(i, i + cols);
+    const h = Math.max(4, ...row.map((b) => heightOf(b, w)));
+    row.forEach((b, j) => out.set(b.id, { x: +(j * w).toFixed(2), y, w: +w.toFixed(2), h }));
+    y += h;
+  }
+
+  for (const b of bottoms) { out.set(b.id, { x: 0, y, w: 12, h: b.h || 2 }); y += b.h || 2; }
+
+  return blocks.map((b) => {
+    const p = out.get(b.id);
+    return p ? { ...b, ...p } : b;
+  });
+}
+
+/** Friendly names for the sheet's contents list. */
+const BLOCK_LABEL = {
+  masthead: 'School masthead', section: 'Panel', notebox: 'Footer note',
+  list: 'Bullet list', text: 'Paragraph', heading: 'Heading', table: 'Table',
+  image: 'Picture', figure: 'Diagram', answer: 'Answer space',
+  lines: 'Writing lines', spacer: 'Blank space', shape: 'Shape',
+  divider: 'Divider', question: 'Question',
+};
+
+const ADDABLE = [
+  ['section', 'Coloured panel', '🗂'],
+  ['list', 'Bullet list', '•'],
+  ['text', 'Paragraph', '¶'],
+  ['heading', 'Heading', 'H'],
+  ['table', 'Table', '▦'],
+  ['image', 'Picture', '🖼'],
+  ['figure', 'Diagram', '⌨'],
+  ['notebox', 'Footer note', '📌'],
+  ['answer', 'Answer space', '✍'],
+  ['lines', 'Writing lines', '≡'],
+  ['spacer', 'Blank space', '⇕'],
+  ['shape', 'Shape', '◻'],
+  ['divider', 'Divider', '—'],
+];
+
+/** A labelled −/+ stepper. Faster than typing for the things teachers nudge. */
+function Stepper({ label, value, onChange, min = 1, max = 40, step = 1, suffix = '' }) {
+  const set = (v) => onChange(Math.min(max, Math.max(min, Number(v.toFixed(1)))));
+  return (
+    <div className="stepper">
+      <span className="stepper-label">{label}</span>
+      <div className="stepper-ctl">
+        <button onClick={() => set(value - step)} disabled={value <= min}>−</button>
+        <span className="stepper-val">{value}{suffix}</span>
+        <button onClick={() => set(value + step)} disabled={value >= max}>+</button>
+      </div>
+    </div>
+  );
+}
+
+const PALETTE = ['#1f7a3d', '#2563c9', '#b8560f', '#8e3bb0',
+                 '#c0392b', '#0f8f98', '#5a7a1f', '#a4307a'];
+
+let n = 0;
+const uid = () => `b${Date.now().toString(36)}${(n++).toString(36)}`;
+
+/** Editing for whichever block is selected, plus the add-block palette. */
+export default function Inspector({
+  doc, setDoc, sel, onSelect, onPatchItem, onLibrary, onOpenPicker,
+  tool, onTool,
+}) {
+  const selectedId = sel?.blockId || null;
+  const itemIndex = sel?.itemIndex;
+
+  const page = doc.pages[0] || { blocks: [], mode: 'flow' };
+  const canvas = page.mode === 'canvas';
+  const index = page.blocks.findIndex((b) => b.id === selectedId);
+  const block = index >= 0 ? page.blocks[index] : null;
+
+  // Which collection a question's pictures live in.
+  const itemsKey = block?.content?.items ? 'items'
+    : block?.content?.left ? 'left' : null;
+  const item = block && itemIndex != null && itemsKey
+    ? block.content[itemsKey][itemIndex] : null;
+
+  const write = (fn) =>
+    setDoc((d) => {
+      const pages = [...d.pages];
+      pages[0] = { ...pages[0], blocks: fn([...pages[0].blocks]) };
+      return { ...d, pages };
+    });
+
+  const patch = (p) => write((bs) => {
+    bs[index] = { ...bs[index], ...p };
+    return bs;
+  });
+
+  const patchContent = (p) => write((bs) => {
+    bs[index] = { ...bs[index], content: { ...bs[index].content, ...p } };
+    return bs;
+  });
+
+  function add(type) {
+    const b = {
+      id: uid(), type,
+      ...(canvas ? { x: 0, y: nextY(), w: 4, h: 4, z: page.blocks.length } : {}),
+      content: defaults(type),
+      style: {},
+    };
+    write((bs) => [...bs, b]);
+    onSelect?.(b.id);
+  }
+
+  function nextY() {
+    return page.blocks.reduce((m, b) => Math.max(m, (b.y || 0) + (b.h || 0)), 0);
+  }
+
+  function defaults(type) {
+    switch (type) {
+      case 'section': return { title: 'New panel', accent: PALETTE[page.blocks.length % 8],
+                               blocks: [{ id: uid(), type: 'list', style: {},
+                                          content: { items: [{ text: 'First item' }] } }] };
+      case 'list':    return { items: [{ text: 'First item' }] };
+      case 'text':    return { text: 'Type here.' };
+      case 'heading': return { text: 'Heading', level: 2 };
+      case 'table':   return { headers: ['Topic', 'Items'], rows: [['', '']] };
+      case 'image':   return { assetId: '', generate: '', fit: 'contain' };
+      case 'figure':  return { kind: 'keyboard', opts: {}, height: null };
+      case 'notebox': return { label: 'Note', text: 'Type the note here.' };
+      case 'lines':   return { count: 3, gap: 8 };
+      case 'answer':  return { variant: 'lines', count: 4, gap: 9, height: 30, cell: 6, label: '' };
+      case 'spacer':  return { height: 10 };
+      case 'shape':   return { kind: 'rect', width: 2, w: 40, h: 30, align: 'start' };
+      default:        return {};
+    }
+  }
+
+  /* ------------------------------------------------ the panel manager
+     A syllabus is a set of panels, and which panels a given sheet needs
+     changes from class to class -- KG-II wants the Urdu band, Class 3 may
+     not. These act on the page as a whole, so they work without hunting
+     for the right block first. */
+
+  /** Every block that behaves as a panel in the grid. */
+  const panels = page.blocks.filter((b) => b.type === 'section');
+
+  function addPanel() {
+    const cols = guessCols();
+    const w = Math.round(12 / cols);
+    const b = {
+      id: uid(), type: 'section', x: 0, y: nextY(), w, h: 6, z: page.blocks.length,
+      content: {
+        title: 'New panel',
+        number: String(panels.length + 1),
+        accent: PALETTE[panels.length % PALETTE.length],
+        spot: '',
+        blocks: [{ id: uid(), type: 'list', style: {},
+                   content: { items: [{ text: 'First topic' }] } }],
+      },
+      style: {},
+    };
+    /* After the last panel rather than at the very end, so the footer note
+       stays the last thing on the sheet. */
+    const at = page.blocks.reduce(
+      (m, x, i) => (x.type === 'section' ? i + 1 : m), page.blocks.length);
+    const next = [...page.blocks.slice(0, at), b, ...page.blocks.slice(at)];
+    write(() => next);
+    arrange(cols, next);
+    onSelect?.(b.id);
+  }
+
+  /** How many columns the panels are currently laid out in. */
+  function guessCols() {
+    const w = panels.find((b) => b.w)?.w;
+    return w ? Math.max(1, Math.round(12 / w)) : 3;
+  }
+
+  /**
+   * Re-flow every panel into `cols` equal columns, in their present order,
+   * with the masthead kept on top and notes kept at the bottom. Heights are
+   * levelled per row so the sheet reads as a grid rather than a collage.
+   */
+  function arrange(cols, source) {
+    place(cols, source || page.blocks, (b, w) => panelRows(b, w));
+    /* The estimate above only has to be close. Once the browser has drawn
+       the result we can see exactly how much text overflowed, so lay it out
+       a second time with the real heights. */
+    fitHeights(cols);
+  }
+
+  function place(cols, all, heightOf) {
+    write(() => layout(all, cols, heightOf));
+  }
+
+  /**
+   * Measure what the panels actually came out as, then lay them out again
+   * at the heights the text really needs. Fonts, Urdu, pictures and
+   * wrapping all land here for free, where no formula would get them right.
+   */
+  function fitHeights(cols) {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const grown = new Map();
+      for (const cell of document.querySelectorAll('.grid-page .grid-cell[data-block]')) {
+        const rows = Number(cell.dataset.rows);
+        if (!rows) continue;
+        const rowPx = cell.getBoundingClientRect().height / rows;
+        if (!(rowPx > 0)) continue;
+        /* A panel clips at more than one level -- the block wrapper and the
+           coloured section inside it both hide their overflow -- so take the
+           worst overflow anywhere in the subtree, not just the top element. */
+        let over = 0;
+        for (const el of cell.querySelectorAll('*')) {
+          over = Math.max(over, el.scrollHeight - el.clientHeight);
+        }
+        if (over > 1) grown.set(cell.dataset.block, rows + Math.ceil(over / rowPx));
+      }
+      if (!grown.size) return;
+      write((bs) => layout(
+        bs.map((b) => (grown.has(b.id) ? { ...b, h: grown.get(b.id) } : b)),
+        cols,
+        (b) => b.h || 4,
+      ));
+    }));
+  }
+
+  /**
+   * 1, 2, 3 … down the page, after a panel has been added or removed.
+   * The counter lives inside the updater: React may call an updater twice,
+   * and a counter held outside it would carry on from where it left off.
+   */
+  function renumber() {
+    write((bs) => {
+      let n = 0;
+      return bs.map((b) => (b.type === 'section' && b.content.number != null
+        ? { ...b, content: { ...b.content, number: String(++n) } }
+        : b));
+    });
+  }
+
+  function removeById(id) {
+    write((bs) => bs.filter((b) => b.id !== id));
+    if (selectedId === id) onSelect?.(null);
+  }
+
+  function order(dir) {
+    write((bs) => {
+      const j = index + dir;
+      if (j < 0 || j >= bs.length) return bs;
+      [bs[index], bs[j]] = [bs[j], bs[index]];
+      return bs;
+    });
+  }
+
+  function duplicate() {
+    const copy = {
+      ...block, id: uid(),
+      ...(canvas ? { y: (block.y || 0) + (block.h || 2) } : {}),
+    };
+    write((bs) => [...bs, copy]);
+    onSelect?.(copy.id);
+  }
+
+  function remove() {
+    write((bs) => bs.filter((_, i) => i !== index));
+    onSelect?.(null);
+  }
+
+  return (
+    <div className="panel">
+      <h2 className="panel-title">Draw with the cursor</h2>
+      <div className="shape-grid">
+        {SHAPE_IDS.map((k) => (
+          <button
+            key={k}
+            className={tool === k ? 'shape-btn on' : 'shape-btn'}
+            title={`Draw a ${SHAPES[k].name.toLowerCase()}`}
+            onClick={() => onTool?.(tool === k ? null : k)}
+          >
+            <ShapeIcon kind={k} />
+          </button>
+        ))}
+      </div>
+      <p className="hint">
+        {tool
+          ? `Drag on the page to draw a ${SHAPES[tool].name.toLowerCase()}. Press Escape to cancel.`
+          : 'Pick a shape, then drag on the page. Drawn shapes float above the content, so a circle can go over a word.'}
+      </p>
+
+      {canvas && (
+        <>
+          <h2 className="panel-title">Panels on this sheet</h2>
+
+          <div className="blk-list">
+            {page.blocks.filter((b) => !(b.type === 'shape' && b.content.overlay))
+              .map((b) => (
+              <div
+                key={b.id}
+                className={b.id === selectedId ? 'blk-row on' : 'blk-row'}
+                onClick={() => onSelect?.(b.id)}
+              >
+                <span className="blk-row-name">
+                  {b.content?.number ? `${b.content.number}. ` : ''}
+                  {b.type === 'masthead'
+                    ? (b.content?.school || BLOCK_LABEL.masthead)
+                    : (b.content?.title || b.content?.label
+                       || BLOCK_LABEL[b.type] || b.type)}
+                </span>
+                <button
+                  className="blk-row-x"
+                  title="Remove from this sheet"
+                  onClick={(e) => { e.stopPropagation(); removeById(b.id); }}
+                >×</button>
+              </div>
+            ))}
+            {!page.blocks.length && <p className="hint">Nothing on the sheet yet.</p>}
+          </div>
+
+          <div className="chip-row" style={{ marginTop: 8 }}>
+            <button className="chip on" onClick={addPanel}>+ Panel</button>
+            <button className="chip" onClick={renumber}>Renumber</button>
+          </div>
+
+          <h3 className="panel-title">Arrange in</h3>
+          <div className="chip-row">
+            {[1, 2, 3, 4].map((c) => (
+              <button
+                key={c}
+                className={guessCols() === c ? 'chip on' : 'chip'}
+                onClick={() => arrange(c)}
+              >{c} {c === 1 ? 'column' : 'columns'}</button>
+            ))}
+          </div>
+          <p className="hint">
+            Re-flows the panels into an even grid and levels each row, keeping
+            the masthead on top and the note at the bottom. Drawn shapes stay
+            where you put them. Drag or resize any panel afterwards.
+          </p>
+        </>
+      )}
+
+      <h2 className="panel-title">Add to page</h2>
+      <div className="add-grid">
+        {ADDABLE.map(([type, label, glyph]) => (
+          <button key={type} className="add-btn" onClick={() => add(type)} title={label}>
+            <span className="add-glyph">{glyph}</span>
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+
+      {item ? (
+        <>
+          <h2 className="panel-title">
+            Picture {itemIndex + 1} of {block.content[itemsKey].length}
+          </h2>
+
+          <div className="pic-preview">
+            {item.assetId
+              ? <span className="muted">{item.assetId}</span>
+              : item.generate
+                ? <span className="muted">✨ {item.generate}</span>
+                : <span className="muted">No picture yet</span>}
+          </div>
+
+          <button
+            className="primary"
+            onClick={() => onOpenPicker({ blockId: block.id, index: itemIndex })}
+          >
+            {item.assetId ? 'Replace picture' : 'Choose picture'}
+          </button>
+
+          <label className="full">
+            Label
+            <input
+              value={item.label ?? item.text ?? ''}
+              dir="auto"
+              onChange={(e) => onPatchItem(block.id, itemIndex,
+                item.label !== undefined
+                  ? { label: e.target.value }
+                  : { text: e.target.value })}
+            />
+          </label>
+
+          <label className="full">
+            Answer
+            <input
+              value={item.answer || ''}
+              dir="auto"
+              onChange={(e) => onPatchItem(block.id, itemIndex, { answer: e.target.value })}
+            />
+          </label>
+
+          <div className="chip-row" style={{ marginTop: 10 }}>
+            <button
+              className="chip"
+              onClick={() => onPatchItem(block.id, itemIndex, { assetId: '', generate: '' })}
+            >Clear picture</button>
+            <button className="chip" onClick={() => onSelect(block.id, null)}>
+              Select whole question
+            </button>
+          </div>
+
+          <p className="hint">
+            Drag a picture on the page to reorder it within this question.
+            Replacing one never moves the others.
+          </p>
+        </>
+      ) : !block ? (
+        <p className="hint" style={{ marginTop: 16 }}>
+          {canvas
+            ? 'Click a block to move, resize or edit it. Drag to move, pull a handle to resize, arrow keys to nudge, Delete to remove. Hold Shift for half-steps.'
+            : 'Click any block to edit it, or click a single picture inside a question to swap just that one. Drag the ⠿ grip to reorder questions; drag a picture to reorder it within its question.'}
+        </p>
+      ) : (
+        <>
+          <h2 className="panel-title">
+            Selected — {block.type.replace(/_/g, ' ')}
+          </h2>
+
+          {canvas && (
+            <div className="fields">
+              {['x', 'y', 'w', 'h'].map((k) => (
+                <label key={k}>
+                  {{ x: 'Column', y: 'Row', w: 'Width', h: 'Height' }[k]}
+                  <input
+                    type="number" step="0.5"
+                    value={block[k] ?? 0}
+                    onChange={(e) => patch({ [k]: Number(e.target.value) })}
+                  />
+                </label>
+              ))}
+            </div>
+          )}
+
+          <div className="chip-row" style={{ marginTop: 10 }}>
+            <button className="chip" onClick={() => order(-1)}>Send back</button>
+            <button className="chip" onClick={() => order(1)}>Bring forward</button>
+            <button className="chip" onClick={duplicate}>Duplicate</button>
+            <button className="chip danger" onClick={remove}>Delete</button>
+          </div>
+
+          <label className="full">
+            Language
+            <select
+              value={block.language || 'en'}
+              onChange={(e) => patch({ language: e.target.value })}
+            >
+              <option value="en">English</option>
+              <option value="ur">اردو (right to left)</option>
+            </select>
+          </label>
+
+          {/* Font size does nothing on a shape, a gap or a rule, so the
+              control is not offered there. */}
+          {!['shape', 'spacer', 'divider', 'lines'].includes(block.type) && (
+          <>
+          <h3 className="panel-title">Text size</h3>
+          <Stepper
+            label="Font"
+            value={block.style?.size ?? doc.baseSize ?? 11}
+            min={6} max={40} step={0.5} suffix="pt"
+            onChange={(size) => patch({ style: { ...block.style, size } })}
+          />
+          <div className="chip-row" style={{ marginTop: 6 }}>
+            <button
+              className={block.style?.bold ? 'chip on' : 'chip'}
+              onClick={() => patch({ style: { ...block.style, bold: !block.style?.bold } })}
+            >Bold</button>
+            {['start', 'center', 'end'].map((a) => (
+              <button
+                key={a}
+                className={block.style?.align === a ? 'chip on' : 'chip'}
+                onClick={() => patch({ style: { ...block.style, align: a } })}
+              >{a === 'start' ? 'Left' : a === 'end' ? 'Right' : 'Centre'}</button>
+            ))}
+            {(block.style?.size || block.style?.bold || block.style?.align) && (
+              <button className="chip" onClick={() => patch({ style: {} })}>Reset</button>
+            )}
+          </div>
+          </>
+          )}
+
+          {/* ---------------------------------------------- per-type fields */}
+
+          {(block.type === 'heading' || block.type === 'text') && (
+            <label className="full">
+              Text
+              <textarea
+                rows={3}
+                value={block.content.text || ''}
+                onChange={(e) => patchContent({ text: e.target.value })}
+                dir="auto"
+              />
+            </label>
+          )}
+
+          {block.type === 'masthead' && (
+            <>
+              <h3 className="panel-title">Masthead</h3>
+              {[['school', 'School name'], ['term', 'Semester ribbon'],
+                ['title', 'Title'], ['forLabel', 'Joining word'],
+                ['className', 'Class (in the pill)']].map(([k, label]) => (
+                <label className="full" key={k}>
+                  {label}
+                  <input
+                    value={block.content[k] || ''}
+                    dir="auto"
+                    onChange={(e) => patchContent({ [k]: e.target.value })}
+                  />
+                </label>
+              ))}
+
+              <h3 className="panel-title">Monogram</h3>
+              <button
+                className="primary"
+                onClick={() => onOpenPicker({ blockId: block.id, field: 'monogramAssetId' })}
+              >
+                Replace monogram
+              </button>
+              {block.content.monogramAssetId !== DEFAULT_MONOGRAM && (
+                <button
+                  className="chip"
+                  style={{ marginTop: 6 }}
+                  onClick={() => patchContent({ monogramAssetId: DEFAULT_MONOGRAM })}
+                >Back to the school monogram</button>
+              )}
+              <p className="hint">
+                The school monogram is used by default. Replace it here for a
+                campus or a sister school.
+              </p>
+
+              <h3 className="panel-title">Picture, right</h3>
+              <SpotPicker value={block.content.spotRight}
+                          onPick={(spotRight) => patchContent({ spotRight })} />
+              <h3 className="panel-title">Picture, left</h3>
+              <SpotPicker value={block.content.spotLeft}
+                          onPick={(spotLeft) => patchContent({ spotLeft })} />
+
+              <h3 className="panel-title">Colours</h3>
+              <div className="swatch-row">
+                {PALETTE.map((c) => (
+                  <button key={c} className={block.content.accent === c ? 'sw on' : 'sw'}
+                          style={{ background: c }}
+                          onClick={() => patchContent({ accent: c })} />
+                ))}
+              </div>
+              <p className="hint">School-name colour. The class pill uses the next row.</p>
+              <div className="swatch-row">
+                {PALETTE.map((c) => (
+                  <button key={c} className={block.content.pill === c ? 'sw on' : 'sw'}
+                          style={{ background: c }}
+                          onClick={() => patchContent({ pill: c })} />
+                ))}
+              </div>
+            </>
+          )}
+
+          {block.type === 'notebox' && (
+            <>
+              <label className="full">
+                Label
+                <input value={block.content.label || ''} dir="auto"
+                       onChange={(e) => patchContent({ label: e.target.value })} />
+              </label>
+              <label className="full">
+                Note
+                <textarea rows={3} value={block.content.text || ''} dir="auto"
+                          onChange={(e) => patchContent({ text: e.target.value })} />
+              </label>
+            </>
+          )}
+
+          {block.type === 'section' && (
+            <>
+              <label className="full">
+                Panel title
+                <input
+                  value={block.content.title || ''}
+                  dir="auto"
+                  onChange={(e) => patchContent({ title: e.target.value })}
+                />
+              </label>
+              <label className="full">
+                Number (optional)
+                <input
+                  value={block.content.number || ''}
+                  placeholder="1"
+                  onChange={(e) => patchContent({ number: e.target.value })}
+                />
+              </label>
+
+              <h3 className="panel-title">Colour</h3>
+              <div className="swatch-row">
+                {PALETTE.map((c) => (
+                  <button
+                    key={c}
+                    className={block.content.accent === c ? 'sw on' : 'sw'}
+                    style={{ background: c }}
+                    onClick={() => patchContent({ accent: c })}
+                  />
+                ))}
+              </div>
+
+              <h3 className="panel-title">Panel picture</h3>
+              <SpotPicker value={block.content.spot}
+                          onPick={(spot) => patchContent({ spot })} />
+              <p className="hint">
+                Edit the panel's own content by selecting it on the page, or ask
+                for a change in the Content tab.
+              </p>
+            </>
+          )}
+
+          {(block.type === 'list' || block.type === 'section') && (
+            <ListEditor
+              list={block.type === 'list'
+                ? block.content
+                : block.content.blocks?.find((c) => c.type === 'list')?.content}
+              onChange={(items) => {
+                if (block.type === 'list') return patchContent({ items });
+                const blocks = (block.content.blocks || []).map((c) =>
+                  c.type === 'list' ? { ...c, content: { ...c.content, items } } : c);
+                patchContent({ blocks });
+              }}
+              onPick={(i) => onOpenPicker({ blockId: block.id, index: i, list: true })}
+            />
+          )}
+
+          {block.type === 'image' && (
+            <>
+              <div className="pic-preview">
+                {block.content.assetId || block.content.generate
+                  ? <span className="muted">{block.content.assetId || `✨ ${block.content.generate}`}</span>
+                  : <span className="muted">No picture chosen</span>}
+              </div>
+              <button className="primary" onClick={() => onOpenPicker({ blockId: block.id })}>
+                {block.content.assetId ? 'Replace picture' : 'Choose picture'}
+              </button>
+              <p className="hint">
+                Swapping the picture keeps this block exactly where it is — no
+                re-prompting, no re-positioning.
+              </p>
+            </>
+          )}
+
+          {block.type === 'figure' && (() => {
+            const fk = FIGURES[block.content.kind] ? block.content.kind : 'keyboard';
+            const o = block.content.opts || {};
+            const setOpt = (patch) => patchContent({ opts: { ...o, ...patch } });
+            return (
+              <>
+                <h3 className="panel-title">Diagram</h3>
+                <div className="chip-row">
+                  {FIGURE_IDS.map((k) => (
+                    <button
+                      key={k}
+                      className={fk === k ? 'chip on' : 'chip'}
+                      onClick={() => patchContent({ kind: k, opts: {}, height: null })}
+                    >{FIGURES[k].name}</button>
+                  ))}
+                </div>
+
+                <Stepper
+                  label="Height" value={block.content.height ?? FIGURES[fk].h}
+                  min={10} max={260} step={2} suffix="mm"
+                  onChange={(height) => patchContent({ height })}
+                />
+
+                {fk === 'keyboard' && (
+                  <>
+                    <label className="full">
+                      Shade these keys (answer key only)
+                      <input
+                        placeholder="e.g. A, L, I — leave blank for the pupil to colour"
+                        value={(o.highlight || []).join(', ')}
+                        onChange={(e) => setOpt({
+                          highlight: e.target.value.split(',')
+                            .map((s) => s.trim()).filter(Boolean),
+                        })}
+                      />
+                    </label>
+                    <p className="hint">
+                      Normally leave this empty — colouring the keys is the
+                      exercise. Fill it only for the answer key.
+                    </p>
+                  </>
+                )}
+
+                {fk === 'clock' && (
+                  <>
+                    <Stepper label="Hour" value={o.hour ?? 0} min={0} max={12}
+                             onChange={(hour) => setOpt({ hour })} />
+                    <Stepper label="Minute" value={o.minute ?? 0} min={0} max={55} step={5}
+                             onChange={(minute) => setOpt({ minute })} />
+                    <div className="chip-row" style={{ marginTop: 7 }}>
+                      <button className="chip" onClick={() => setOpt({ hour: null, minute: null })}>
+                        Blank face
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {fk === 'numberline' && (
+                  <>
+                    <Stepper label="From" value={o.from ?? 0} min={0} max={100}
+                             onChange={(from) => setOpt({ from })} />
+                    <Stepper label="To" value={o.to ?? 10} min={1} max={100}
+                             onChange={(to) => setOpt({ to })} />
+                  </>
+                )}
+
+                {fk === 'tenframe' && (
+                  <Stepper label="Frames" value={o.frames ?? 1} min={1} max={5}
+                           onChange={(frames) => setOpt({ frames })} />
+                )}
+
+                {fk === 'trace' && (
+                  <label className="full">
+                    Letters to trace
+                    <input
+                      value={o.text || ''} dir="auto" placeholder="a b c"
+                      onChange={(e) => setOpt({ text: e.target.value })}
+                    />
+                  </label>
+                )}
+              </>
+            );
+          })()}
+
+          {block.type === 'question' && block.content.qtype === 'match' && (
+            <MatchEditor
+              content={block.content}
+              onChange={(patch) => patchContent(patch)}
+              onPickPicture={(i) => onOpenPicker({ blockId: block.id, index: i })}
+            />
+          )}
+
+          {block.type === 'table' && (
+            <TableEditor
+              content={block.content}
+              onChange={(c) => patchContent(c)}
+            />
+          )}
+
+          {block.type === 'lines' && (
+            <>
+              <h3 className="panel-title">Writing lines</h3>
+              <Stepper label="Lines" value={block.content.count} min={1} max={40}
+                       onChange={(count) => patchContent({ count })} />
+              <Stepper label="Spacing" value={block.content.gap ?? 8} min={4} max={20}
+                       suffix="mm" onChange={(gap) => patchContent({ gap })} />
+              <p className="hint">
+                Wider spacing for younger children — nursery needs about 12mm,
+                Class 3 is comfortable at 7mm.
+              </p>
+            </>
+          )}
+
+          {block.type === 'answer' && (
+            <>
+              <h3 className="panel-title">Answer space</h3>
+              <div className="chip-row">
+                {[['lines', 'Ruled lines'], ['dotted', 'Dotted guides'],
+                  ['box', 'Empty box'], ['grid', 'Squared paper']].map(([v, label]) => (
+                  <button
+                    key={v}
+                    className={block.content.variant === v ? 'chip on' : 'chip'}
+                    onClick={() => patchContent({ variant: v })}
+                  >{label}</button>
+                ))}
+              </div>
+
+              {['lines', 'dotted'].includes(block.content.variant) ? (
+                <>
+                  <Stepper label="Lines" value={block.content.count} min={1} max={40}
+                           onChange={(count) => patchContent({ count })} />
+                  <Stepper label="Spacing" value={block.content.gap} min={4} max={20}
+                           suffix="mm" onChange={(gap) => patchContent({ gap })} />
+                </>
+              ) : (
+                <>
+                  <Stepper label="Height" value={block.content.height} min={8} max={250}
+                           step={5} suffix="mm" onChange={(height) => patchContent({ height })} />
+                  {block.content.variant === 'grid' && (
+                    <Stepper label="Square" value={block.content.cell} min={3} max={20}
+                             suffix="mm" onChange={(cell) => patchContent({ cell })} />
+                  )}
+                </>
+              )}
+
+              <label className="full">
+                Label (optional)
+                <input
+                  value={block.content.label || ''}
+                  dir="auto"
+                  placeholder="e.g. Answer:"
+                  onChange={(e) => patchContent({ label: e.target.value })}
+                />
+              </label>
+            </>
+          )}
+
+          {block.type === 'spacer' && (
+            <>
+              <h3 className="panel-title">Blank space</h3>
+              <Stepper label="Height" value={block.content.height} min={1} max={120}
+                       step={2} suffix="mm"
+                       onChange={(height) => patchContent({ height })} />
+              <p className="hint">
+                An empty gap. Use it to push a question onto the next page, or
+                to leave room for the teacher to paste something in.
+              </p>
+            </>
+          )}
+
+          {block.type === 'shape' && (() => {
+            const kind = resolveShape(block.content.kind);
+            const open = SHAPES[kind].open;
+            return (
+              <>
+                <h3 className="panel-title">Shape</h3>
+                <div className="shape-grid">
+                  {SHAPE_IDS.map((k) => (
+                    <button
+                      key={k}
+                      className={kind === k ? 'shape-btn on' : 'shape-btn'}
+                      title={SHAPES[k].name}
+                      onClick={() => patchContent({ kind: k })}
+                    >
+                      <ShapeIcon kind={k} />
+                    </button>
+                  ))}
+                </div>
+
+                {!canvas && (
+                  <>
+                    <h3 className="panel-title">Size</h3>
+                    <Stepper label="Width" value={block.content.w ?? 40}
+                             min={5} max={190} step={5} suffix="mm"
+                             onChange={(w) => patchContent({ w })} />
+                    <Stepper label="Height" value={block.content.h ?? 30}
+                             min={5} max={260} step={5} suffix="mm"
+                             onChange={(h) => patchContent({ h })} />
+                    <div className="chip-row" style={{ marginTop: 7 }}>
+                      {[['start', 'Left'], ['center', 'Centre'], ['end', 'Right']].map(
+                        ([a, label]) => (
+                        <button
+                          key={a}
+                          className={(block.content.align || 'start') === a ? 'chip on' : 'chip'}
+                          onClick={() => patchContent({ align: a })}
+                        >{label}</button>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <h3 className="panel-title">Outline</h3>
+                <Stepper
+                  label="Thickness" value={block.content.width ?? 2}
+                  min={0.5} max={12} step={0.5} suffix="pt"
+                  onChange={(width) => patchContent({ width })}
+                />
+                <div className="chip-row" style={{ marginTop: 7 }}>
+                  <button
+                    className={block.content.dashed ? 'chip on' : 'chip'}
+                    onClick={() => patchContent({ dashed: !block.content.dashed })}
+                  >Dashed</button>
+                </div>
+
+                <h3 className="panel-title">Line colour</h3>
+                <div className="swatch-row">
+                  {['', ...PALETTE, '#16181d'].map((c) => (
+                    <button
+                      key={c || 'theme'}
+                      className={(block.content.stroke || '') === c ? 'sw on' : 'sw'}
+                      style={c ? { background: c }
+                               : { background: 'var(--accent)', outline: '1px solid #ccc' }}
+                      title={c || 'Theme colour'}
+                      onClick={() => patchContent({ stroke: c })}
+                    />
+                  ))}
+                </div>
+
+                {!open && (
+                  <>
+                    <h3 className="panel-title">Fill</h3>
+                    <div className="swatch-row">
+                      <button
+                        className={!block.content.fill ? 'sw none on' : 'sw none'}
+                        title="No fill"
+                        onClick={() => patchContent({ fill: '' })}
+                      />
+                      {PALETTE.map((c) => (
+                        <button
+                          key={c}
+                          className={block.content.fill === c ? 'sw on' : 'sw'}
+                          style={{ background: c }}
+                          onClick={() => patchContent({ fill: c })}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <p className="hint">
+                  {canvas
+                    ? 'Drag a corner on the page to reshape — the shape stretches to its box.'
+                    : 'Set the size here. On a Grid page you could drag the corners instead.'}
+                  {' '}A dashed oval over a word is how "circle the answer" is
+                  usually marked.
+                </p>
+              </>
+            );
+          })()}
+
+          {block.type === 'raw' && (
+            <p className="hint">
+              This block is raw HTML from the assistant. It renders as written
+              and cannot be edited here — ask for a change in the Content tab,
+              or delete it.
+            </p>
+          )}
+        </>
+      )}
+
+    </div>
+  );
+}
+
+function ListEditor({ list, onChange, onPick }) {
+  if (!list) return null;
+  const items = list.items || [];
+
+  const set = (i, p) => {
+    const next = [...items];
+    next[i] = { ...next[i], ...p };
+    onChange(next);
+  };
+
+  return (
+    <>
+      <h3 className="panel-title">Items</h3>
+      {items.map((it, i) => (
+        <div className="itemedit" key={i}>
+          <button className="icon-btn" title="Picture" onClick={() => onPick(i)}>
+            {it.assetId ? '🖼' : '＋'}
+          </button>
+          <input
+            value={it.text || ''}
+            dir="auto"
+            onChange={(e) => set(i, { text: e.target.value })}
+          />
+          <button
+            className="icon-btn danger"
+            onClick={() => onChange(items.filter((_, j) => j !== i))}
+          >×</button>
+        </div>
+      ))}
+      <button className="link-btn" onClick={() => onChange([...items, { text: '' }])}>
+        + Add item
+      </button>
+    </>
+  );
+}
+
+/**
+ * Match-the-columns editor.
+ *
+ * A pair is one picture and its correct word. The right column is the same
+ * words shuffled, kept as its own list so a teacher can reorder it by hand
+ * and it stays put when the pairs are edited.
+ */
+function MatchEditor({ content, onChange, onPickPicture }) {
+  const left = content.left || [];
+  const right = content.right || [];
+
+  const writeLeft = (next) => onChange({
+    left: next.map((it, i) => ({ ...it, number: String(i + 1) })),
+  });
+
+  const setPair = (i, patch) => {
+    const next = [...left];
+    next[i] = { ...next[i], ...patch };
+    writeLeft(next);
+  };
+
+  const addPair = () => {
+    const next = [...left, { number: String(left.length + 1), label: '', assetId: '' }];
+    onChange({
+      left: next.map((it, i) => ({ ...it, number: String(i + 1) })),
+      right: [...right, { label: '' }],
+    });
+  };
+
+  const removePair = (i) => {
+    const word = left[i]?.label;
+    onChange({
+      left: left.filter((_, j) => j !== i).map((it, j) => ({ ...it, number: String(j + 1) })),
+      // Drop the matching word from the right column, by value not index,
+      // since the right column is shuffled.
+      right: (() => {
+        const k = right.findIndex((r) => r.label === word);
+        return k === -1 ? right.slice(0, -1) : right.filter((_, j) => j !== k);
+      })(),
+    });
+  };
+
+  const movePair = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= left.length) return;
+    const next = [...left];
+    [next[i], next[j]] = [next[j], next[i]];
+    writeLeft(next);
+  };
+
+  /** Rebuild the right column from the pairs, shuffled. */
+  const shuffle = () => {
+    const words = left.map((it) => it.label).filter(Boolean);
+    for (let i = words.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [words[i], words[j]] = [words[j], words[i]];
+    }
+    onChange({ right: words.map((label) => ({ label })) });
+  };
+
+  const setRight = (i, label) => {
+    const next = [...right];
+    next[i] = { label };
+    onChange({ right: next });
+  };
+
+  const moveRight = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= right.length) return;
+    const next = [...right];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange({ right: next });
+  };
+
+  const mismatch = left.length !== right.length;
+
+  return (
+    <>
+      <h3 className="panel-title">Pairs — picture and its word</h3>
+      {left.map((it, i) => (
+        <div className="pair-row" key={i}>
+          <span className="pair-num">{i + 1}</span>
+          <button
+            className="pair-pic"
+            title={it.assetId || 'Choose a picture'}
+            onClick={() => onPickPicture(i)}
+          >
+            {it.assetId ? '🖼' : '＋'}
+          </button>
+          <input
+            value={it.label || ''}
+            dir="auto"
+            placeholder="word"
+            onChange={(e) => setPair(i, { label: e.target.value })}
+          />
+          <div className="tbl-rowctl">
+            <button onClick={() => movePair(i, -1)} disabled={i === 0}>↑</button>
+            <button onClick={() => movePair(i, 1)} disabled={i === left.length - 1}>↓</button>
+            <button className="danger" onClick={() => removePair(i)}>×</button>
+          </div>
+        </div>
+      ))}
+      <div className="chip-row" style={{ marginTop: 7 }}>
+        <button className="chip" onClick={addPair}>+ Pair</button>
+      </div>
+
+      <h3 className="panel-title">Right column — the words, shuffled</h3>
+      {mismatch && (
+        <p className="hint warn">
+          {left.length} pictures but {right.length} words. Press Shuffle to
+          rebuild the column.
+        </p>
+      )}
+      {right.map((it, i) => (
+        <div className="pair-row" key={i}>
+          <span className="pair-num">{String.fromCharCode(97 + i)}</span>
+          <input
+            value={it.label || ''}
+            dir="auto"
+            onChange={(e) => setRight(i, e.target.value)}
+          />
+          <div className="tbl-rowctl">
+            <button onClick={() => moveRight(i, -1)} disabled={i === 0}>↑</button>
+            <button onClick={() => moveRight(i, 1)} disabled={i === right.length - 1}>↓</button>
+          </div>
+        </div>
+      ))}
+      <div className="chip-row" style={{ marginTop: 7 }}>
+        <button className="chip" onClick={shuffle}>🔀 Shuffle</button>
+        <button
+          className={content.showLabels ? 'chip on' : 'chip'}
+          onClick={() => onChange({ showLabels: !content.showLabels })}
+        >Show words on the left too</button>
+      </div>
+      <p className="hint">
+        The left column prints pictures only — its words are the answer key.
+        Turn the last option on only if you want the word beside each picture.
+      </p>
+    </>
+  );
+}
+
+function TableEditor({ content, onChange }) {
+  const headers = content.headers || [];
+  const rows = content.rows || [];
+  const cols = Math.max(headers.length, ...rows.map((r) => r.length), 1);
+
+  /* Rows and headers are kept the same width at all times, so a ragged table
+     from the model cannot produce cells the editor is unable to reach. */
+  const squared = (list, width, fill = '') =>
+    Array.from({ length: width }, (_, i) => list[i] ?? fill);
+
+  const write = (nextHeaders, nextRows, width) =>
+    onChange({
+      headers: squared(nextHeaders, width),
+      rows: nextRows.map((r) => squared(r, width)),
+    });
+
+  const setHeader = (i, v) => {
+    const next = squared(headers, cols);
+    next[i] = v;
+    write(next, rows, cols);
+  };
+
+  const setCell = (r, c, v) => {
+    const next = rows.map((row) => squared(row, cols));
+    next[r][c] = v;
+    write(headers, next, cols);
+  };
+
+  const addColumn = () => write(headers, rows, cols + 1);
+
+  const removeColumn = (c) => {
+    if (cols <= 1) return;
+    write(
+      squared(headers, cols).filter((_, i) => i !== c),
+      rows.map((r) => squared(r, cols).filter((_, i) => i !== c)),
+      cols - 1
+    );
+  };
+
+  const addRow = () => write(headers, [...rows, Array(cols).fill('')], cols);
+  const removeRow = (r) => write(headers, rows.filter((_, i) => i !== r), cols);
+
+  const moveRow = (r, dir) => {
+    const j = r + dir;
+    if (j < 0 || j >= rows.length) return;
+    const next = rows.map((row) => squared(row, cols));
+    [next[r], next[j]] = [next[j], next[r]];
+    write(headers, next, cols);
+  };
+
+  return (
+    <>
+      <h3 className="panel-title">Table — {cols} column{cols === 1 ? '' : 's'} × {rows.length} row{rows.length === 1 ? '' : 's'}</h3>
+
+      <div className="tbl-edit">
+        <div className="tbl-row head">
+          {squared(headers, cols).map((h, i) => (
+            <div className="tbl-cell" key={i}>
+              <input
+                value={h}
+                dir="auto"
+                placeholder={`Column ${i + 1}`}
+                onChange={(e) => setHeader(i, e.target.value)}
+              />
+              <button
+                className="col-del"
+                title="Delete this column"
+                disabled={cols <= 1}
+                onClick={() => removeColumn(i)}
+              >×</button>
+            </div>
+          ))}
+        </div>
+
+        {rows.map((row, r) => (
+          <div className="tbl-row" key={r}>
+            {squared(row, cols).map((c, ci) => (
+              <div className="tbl-cell" key={ci}>
+                <input value={c} dir="auto" onChange={(e) => setCell(r, ci, e.target.value)} />
+              </div>
+            ))}
+            <div className="tbl-rowctl">
+              <button onClick={() => moveRow(r, -1)} disabled={r === 0} title="Move up">↑</button>
+              <button onClick={() => moveRow(r, 1)} disabled={r === rows.length - 1} title="Move down">↓</button>
+              <button className="danger" onClick={() => removeRow(r)} title="Delete row">×</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="chip-row" style={{ marginTop: 8 }}>
+        <button className="chip" onClick={addRow}>+ Row</button>
+        <button className="chip" onClick={addColumn}>+ Column</button>
+      </div>
+    </>
+  );
+}
