@@ -48,7 +48,12 @@ export default function Masthead({ content = {}, assets }) {
     spotRight = 'book-stack',
     accent = '#1a5fb4',
     pill = '#7048e8',
+    /* 'ribbon' is the school's printed sheet: notched banner, SYLLABUS for
+       <class> on one line. 'pills' is the poster version: the term and the
+       class each in their own rounded badge, stacked. */
+    variant = 'ribbon',
   } = content;
+  const pills = variant === 'pills';
 
   /* `crestAssetId` is the old name for this field. Documents saved under it
      live in the teacher's browser, not on the server, so the rename has to
@@ -57,7 +62,10 @@ export default function Masthead({ content = {}, assets }) {
     content.monogramAssetId ?? content.crestAssetId ?? DEFAULT_MONOGRAM;
 
   return (
-    <header className="masthead" style={{ '--mh': accent, '--pill': pill }}>
+    <header
+      className={`masthead${pills ? ' mh-pills' : ''}`}
+      style={{ '--mh': accent, '--pill': pill }}
+    >
       <div className="mh-monogram">
         {monogramAssetId && assets?.[monogramAssetId]
           ? <Asset id={monogramAssetId} assets={assets} size="100%" />
@@ -67,20 +75,30 @@ export default function Masthead({ content = {}, assets }) {
       <div className="mh-mid">
         <h1 className="mh-school">{school}</h1>
 
-        {term && (
+        {term && (pills ? (
+          <div className="mh-term-pill">{term}</div>
+        ) : (
           <div className="mh-ribbon">
             <span className="mh-ribbon-tail left" />
             <span className="mh-ribbon-body">{term}</span>
             <span className="mh-ribbon-tail right" />
           </div>
-        )}
+        ))}
 
         <div className="mh-title">
-          <span className="mh-title-main">{title}</span>
-          {className && (
+          {pills ? (
+            <span className="mh-class-pill">
+              {title} {className && `${forLabel} ${className}`}
+            </span>
+          ) : (
             <>
-              <span className="mh-for">{forLabel}</span>
-              <span className="mh-pill">{className}</span>
+              <span className="mh-title-main">{title}</span>
+              {className && (
+                <>
+                  <span className="mh-for">{forLabel}</span>
+                  <span className="mh-pill">{className}</span>
+                </>
+              )}
             </>
           )}
         </div>

@@ -296,6 +296,31 @@
 .blk-raw { all: revert; }
 
 /* ------------------------------------------------------------------ print */
+/* While a sheet is being captured as a picture it has to look exactly as
+   it prints: the editing chrome below is the same set the print rules hide,
+   switched on a class instead of a media query. */
+body.exporting .grid-lines,
+body.exporting .mv-handle,
+body.exporting .mv-size,
+body.exporting .slot-badge,
+body.exporting .flow-grip { display: none !important; }
+
+body.exporting .grid-page.editing,
+body.exporting .grid-cell,
+body.exporting .flow-wrap,
+body.exporting .blk-pick,
+body.exporting .blk-on,
+body.exporting .slot { outline: 0 !important; }
+
+body.exporting .editable-text,
+body.exporting .li-pic,
+body.exporting .sec-spot,
+body.exporting .ir-spot,
+body.exporting .slot { background: none !important; box-shadow: none !important; }
+
+body.exporting .flow-wrap,
+body.exporting .sheet { box-shadow: none !important; }
+
 @media print {
   @page { size: A4; margin: 0; }
   html, body { background: #fff !important; }
@@ -356,6 +381,39 @@
   .grid-lines, .mv-handle, .mv-size { display: none !important; }
   .grid-page.editing { outline: 0 !important; }
   .grid-cell, .flow-wrap { outline: 0 !important; }
+}
+
+/* ============================================ editing inside a panel ====
+   A list, a picture-row set or any other block inside a panel is its own
+   target: click to select, right-click for the menu, double-click a piece
+   of text to retype it. Screen only -- print strips all of it. */
+
+.blk-pick { border-radius: 1.5mm; cursor: pointer; }
+.blk-pick:hover { outline: 1.2px dashed #9dc1ef; outline-offset: 2px; }
+.blk-on { outline: 1.6px solid #1a5fb4; outline-offset: 2px; }
+
+.editable-text { border-radius: 1mm; }
+.editable-text:hover {
+  background: #eef4fd;
+  box-shadow: 0 0 0 2px #eef4fd;
+  cursor: text;
+}
+.editable-text.editing {
+  background: #fff;
+  box-shadow: 0 0 0 2px #1a5fb4;
+  outline: none;
+  cursor: text;
+  /* While typing, nothing underneath should react to the pointer. */
+  white-space: pre-wrap;
+}
+
+/* A picture in a bullet is clickable on its own, like a question's slots. */
+.li-pic.pickable { border-radius: 1mm; cursor: pointer; }
+.li-pic.pickable:hover { background: #dbe8f9; box-shadow: 0 0 0 2px #dbe8f9; }
+
+@media print {
+  .blk-pick, .blk-on { outline: 0 !important; }
+  .editable-text, .li-pic { background: none !important; box-shadow: none !important; }
 }
 
 /* ================================================== picture slots ======= */
@@ -663,12 +721,162 @@
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 9pt; font-weight: 800; flex: 0 0 auto;
 }
-.blk-section-body { position: relative; }
+/* `flow-root` so the floated panel picture is contained: without it a tall
+   picture beside short text hangs out of the body box, which reads as
+   overflow and makes the fit pass grow the panel for no reason. */
+.blk-section-body { position: relative; display: flow-root; }
 .sec-spot {
   float: inline-end;
   margin: 0 0 1.5mm 2.5mm;
   shape-outside: margin-box;
 }
+.sec-spot .spot { width: 20mm; height: 20mm; }
+
+/* Panels scale with their own width.
+   -----------------------------------
+   On a canvas page a panel is resized by dragging, and a narrower panel
+   with the same type size just wraps into a tall thin column. Making the
+   panel a container lets its heading, body, number badge and illustration
+   all size in `cqw` -- a percentage of the panel's own width -- so the
+   whole thing shrinks and grows as one. The clamps stop it going
+   unreadable in a quarter-width column or comic-book huge in a full-width
+   band. Flow pages (the exam papers) are untouched: no container, so the
+   fixed sizes above still apply. */
+.grid-cell .blk-section { container-type: inline-size; }
+
+.grid-cell .blk-section-head { font-size: clamp(6.5pt, 4.6cqw, 12pt); }
+.grid-cell .blk-section-body { font-size: clamp(5.6pt, 3.5cqw, 9.5pt); }
+.grid-cell .sec-num {
+  min-width: clamp(4mm, 9cqw, 8mm);
+  height: clamp(4mm, 9cqw, 8mm);
+  font-size: clamp(5.5pt, 3.6cqw, 11pt);
+}
+.grid-cell .sec-spot .spot,
+.grid-cell .sec-spot .asset-img {
+  width: clamp(9mm, 24cqw, 28mm);
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: contain;
+}
+
+/* ------------------------------------------------- poster masthead ----
+   The same block, arranged the way the printed poster does it: the term
+   and the class each in their own rounded badge rather than a notched
+   ribbon and an inline pill. */
+.mh-pills .mh-school { font-size: 30pt; letter-spacing: 0; }
+.mh-term-pill,
+.mh-class-pill {
+  display: inline-block;
+  font-family: var(--headFont);
+  font-weight: 800;
+  border-radius: 10mm;
+  padding: 1.1mm 7mm;
+  line-height: 1.3;
+}
+.mh-term-pill {
+  background: #ffd93d;
+  color: #17365d;
+  font-size: 16pt;
+  margin: 1.5mm 0 2mm;
+}
+.mh-class-pill {
+  background: var(--pill);
+  color: #fff;
+  font-size: 15pt;
+}
+
+/* ------------------------------------------------- speech bubbles -----
+   Drawn in CSS so they take a colour, scale with their box and print
+   without an image. The tail is a rotated square tucked under the edge. */
+.bubble {
+  --bub: #e7f1ff;
+  position: relative;
+  background: var(--bub);
+  border: 1.2pt solid color-mix(in srgb, var(--bub) 55%, #37486a);
+  border-radius: 6mm;
+  padding: 2.5mm 4mm;
+  height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center;
+  font-weight: 800;
+  font-size: 13pt;
+  color: #17365d;
+  line-height: 1.2;
+}
+/* On a canvas page the bubble's words scale with the bubble, in both
+   directions -- a short wide box and a tall narrow one both have to hold
+   the same two or three words without spilling. */
+.grid-cell > .blk-bubble { container-type: size; height: 100%; }
+.grid-cell .bubble { font-size: clamp(6pt, min(11cqw, 15cqh), 18pt); }
+
+/* A cloud: the same box with much rounder corners and two puffs on top. */
+.bubble.bub-cloud { border-radius: 50% / 34%; }
+.bubble.bub-burst {
+  border-radius: 2mm;
+  clip-path: polygon(50% 0, 62% 12%, 78% 6%, 80% 23%, 97% 28%, 86% 41%,
+                     100% 55%, 84% 63%, 90% 80%, 72% 79%, 66% 96%, 50% 86%,
+                     34% 96%, 28% 79%, 10% 80%, 16% 63%, 0 55%, 14% 41%,
+                     3% 28%, 20% 23%, 22% 6%, 38% 12%);
+  border: 0;
+  padding: 5mm;
+}
+/* The wrapper owns the whole callout: the rounded box, and the little
+   pointer below it. Both stay inside the wrapper's own box. */
+.bub-wrap { position: relative; height: 100%; --bub: #e7f1ff; }
+.bub-wrap .bubble { height: calc(100% - 3.2mm); }
+.bub-tail {
+  position: absolute;
+  bottom: 0.4mm;
+  width: 4.5mm; height: 4.5mm;
+  transform: rotate(45deg);
+  background: var(--bub);
+  border-right: 1.2pt solid color-mix(in srgb, var(--bub) 55%, #37486a);
+  border-bottom: 1.2pt solid color-mix(in srgb, var(--bub) 55%, #37486a);
+}
+.tail-left  .bub-tail { inset-inline-start: 7mm; }
+.tail-right .bub-tail { inset-inline-end: 7mm; }
+
+/* --------------------------------------------- picture rows (nature) -- */
+.iconrows { height: 100%; }
+.sec-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 1mm 4mm; }
+/* Picture rows are a dense list, so they stay a size below body text. */
+.grid-cell .iconrows { font-size: clamp(4.6pt, 1.9cqw, 8pt); }
+.ir-heading {
+  font-weight: 800;
+  color: var(--accent2);
+  background: #fff3bf;
+  border-radius: 1.5mm;
+  padding: 0.6mm 2.5mm;
+  display: inline-block;
+  margin-bottom: 1.5mm;
+}
+.ir-row {
+  display: grid;
+  grid-template-columns: 8mm auto 1fr;
+  align-items: center;
+  gap: 2mm;
+  margin-bottom: 1.2mm;
+}
+.ir-spot { width: 8mm; display: inline-flex; }
+.ir-spot .spot,
+.ir-spot .asset-img { width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; }
+/* The panel and row pictures are clickable targets while editing. */
+.sec-spot.pickable, .ir-spot.pickable { cursor: pointer; border-radius: 1.5mm; }
+.sec-spot.pickable:hover, .ir-spot.pickable:hover {
+  background: #dbe8f9; box-shadow: 0 0 0 2px #dbe8f9;
+}
+@media print {
+  .sec-spot, .ir-spot { background: none !important; box-shadow: none !important; }
+}
+.ir-label { font-weight: 700; white-space: nowrap; }
+.ir-text {
+  border: 1pt solid var(--rule);
+  border-radius: 1.5mm;
+  padding: 0.4mm 2mm;
+  background: #fff;
+}
+.grid-cell .ir-row { gap: clamp(1mm, 2cqw, 3mm); }
+.grid-cell .ir-spot { width: clamp(4.5mm, 7cqw, 9mm); }
 
 /* footer note */
 /* `.notebox` is the box; `.blk-notebox` is the Block wrapper around it, so

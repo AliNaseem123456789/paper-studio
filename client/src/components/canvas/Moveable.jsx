@@ -18,7 +18,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
  * the document never stores pixels.
  */
 export default function Moveable({
-  block, selected, editable, onSelect, onChange, onDelete, rtl, children,
+  block, selected, editable, onSelect, onChange, onDelete, onMenu, rtl, children,
 }) {
   const ref = useRef(null);
   const drag = useRef(null);
@@ -44,6 +44,18 @@ export default function Moveable({
 
   const begin = (mode) => (e) => {
     if (!editable) return;
+    /* Anything inside the block that is a target in its own right -- a
+       nested block, a piece of editable text, a picture -- handles its own
+       pointer. Starting a drag here would preventDefault and the click and
+       double-click would never arrive. The block still drags by its
+       heading, its padding and its handles. */
+    if (mode === 'move' && e.target?.closest?.('.blk-pick, .editable-text, .pickable')) {
+      /* A nested block selects itself on click; anything else inside this
+         one (its own title, its picture) still selects this block, it just
+         does not start a drag. */
+      if (!e.target.closest('.blk-pick')) onSelect?.(block.id);
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     onSelect?.(block.id);
@@ -131,6 +143,12 @@ export default function Moveable({
       ref={ref}
       data-block={block.id}
       data-rows={b.h}
+      onContextMenu={(e) => {
+        if (!editable || !onMenu) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onMenu(block.id, e.clientX, e.clientY);
+      }}
       className={`grid-cell${editable ? ' editable' : ''}${selected ? ' selected' : ''}`}
       style={{
         insetInlineStart: `${(b.x / GRID_COLS) * 100}%`,

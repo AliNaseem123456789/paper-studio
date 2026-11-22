@@ -293,13 +293,14 @@ export const SPOTS = {
 
 export const SPOT_IDS = Object.keys(SPOTS);
 
+/**
+ * `size` is in millimetres. Pass null to leave it to CSS, which is what a
+ * panel illustration does so it can scale with the panel.
+ */
 export default function Spot({ id, size = 22 }) {
   const def = SPOTS[id];
   if (!def) return null;
   const El = def.el;
-  return (
-    <span className="spot" style={{ width: `${size}mm`, height: `${size}mm` }}>
-      <El />
-    </span>
-  );
+  const style = size == null ? undefined : { width: `${size}mm`, height: `${size}mm` };
+  return <span className="spot" style={style}><El /></span>;
 }

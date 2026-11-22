@@ -1,4 +1,7 @@
 import { apiFetch } from './lib/api.js';
+import ContextMenu from './components/ContextMenu.jsx';
+import { SPOT_IDS, SPOTS } from './components/blocks/spots.jsx';
+import { exportSheets } from './lib/exportImage.js';
 import React, { useEffect, useRef, useState } from 'react';
 import Composer from './components/Composer.jsx';
 import Editor from './components/Editor.jsx';
@@ -99,6 +102,11 @@ export default function App() {
   // picture in a question is its own target.
   const [sel, setSel] = useState({ blockId: null, itemIndex: null });
   const [picking, setPicking] = useState(null);
+  /* The pop-up menu: the right-click one on a block, and the Save menu in
+     the toolbar. Both are the same component -- `items` when the caller
+     supplies its own list, `id` when it is a block's own menu. */
+  const [menu, setMenu] = useState(null);
+  const [saving, setSaving] = useState('');
   const [urduKb, setUrduKb] = useState(false);
   // Which shape the cursor draws, or null for the normal pointer.
   const [tool, setTool] = useState(null);
@@ -124,9 +132,15 @@ export default function App() {
     if (next === 'syllabus' && !syllabus) loadSyllabusTemplate();
   }
 
-  async function loadSyllabusTemplate() {
+  /**
+   * Start a syllabus from a template. Unlike the Design tab -- which keeps
+   * the teacher's content and changes only the look -- this takes the
+   * template's blocks, because for a syllabus the arrangement IS the thing
+   * being chosen.
+   */
+  async function loadSyllabusTemplate(id = 'syllabus-alsehar') {
     try {
-      const res = await apiFetch('/api/templates/syllabus-alsehar');
+      const res = await apiFetch(`/api/templates/${id}`);
       const body = await res.json();
       if (res.ok) { setSyllabus(ensureIds(body.doc)); setView('layout'); }
     } catch { /* the Create tab still works */ }
@@ -305,15 +319,202 @@ export default function App() {
       })),
     }));
 
+  /** Remove a block from wherever it is, including inside a panel. */
   const deleteBlock = (id) => {
-    setActive((d) => ({
-      ...d,
-      pages: d.pages.map((pg) => ({
-        ...pg, blocks: pg.blocks.filter((b) => b.id !== id),
-      })),
-    }));
+    const drop = (blocks) => blocks
+      .filter((b) => b.id !== id)
+      .map((b) => (Array.isArray(b.content?.blocks)
+        ? { ...b, content: { ...b.content, blocks: drop(b.content.blocks) } }
+        : b));
+    setActive((d) => ({ ...d, pages: d.pages.map((pg) => ({ ...pg, blocks: drop(pg.blocks) })) }));
     setSel({ blockId: null, itemIndex: null });
   };
+
+  /* ------------------------------------------------- right-click actions
+     The same edits the Layout panel offers, reachable where the pointer
+     already is. They work on any page, not just the first. */
+
+  /** Find a block by id, including blocks nested inside a panel. */
+  const findBlock = (id) => {
+    const dig = (blocks) => {
+      for (const b of blocks) {
+        if (b.id === id) return b;
+        if (Array.isArray(b.content?.blocks)) {
+          const hit = dig(b.content.blocks);
+          if (hit) return hit;
+        }
+      }
+      return null;
+    };
+    for (let i = 0; i < (active?.pages.length || 0); i += 1) {
+      const top = active.pages[i].blocks.find((x) => x.id === id);
+      if (top) return { block: top, pageIndex: i, top: true };
+      const nested = dig(active.pages[i].blocks);
+      if (nested) return { block: nested, pageIndex: i, top: false };
+    }
+    return { block: null, pageIndex: -1, top: false };
+  };
+
+  const duplicateBlock = (id) => {
+    const { block, pageIndex, top } = findBlock(id);
+    if (!block) return;
+    const copy = {
+      ...structuredClone(block),
+      id: `b${Date.now().toString(36)}`,
+      // A free-floating block is offset so the copy is visibly its own
+      // thing; one inside a panel just follows its original in the list.
+      ...(top && active.pages[pageIndex].mode === 'canvas'
+        ? { x: Math.min(block.x + 1, 11), y: block.y + 1 } : {}),
+    };
+    /* Insert right after the original, wherever that is. */
+    const after = (blocks) => {
+      const i = blocks.findIndex((b) => b.id === id);
+      if (i >= 0) return [...blocks.slice(0, i + 1), copy, ...blocks.slice(i + 1)];
+      return blocks.map((b) => (Array.isArray(b.content?.blocks)
+        ? { ...b, content: { ...b.content, blocks: after(b.content.blocks) } }
+        : b));
+    };
+    setActive((d) => ({
+      ...d,
+      pages: d.pages.map((pg, i) => (i === pageIndex ? { ...pg, blocks: after(pg.blocks) } : pg)),
+    }));
+    select(copy.id);
+  };
+
+  /** Front and back within a page, by the z used for stacking. */
+  const orderBlock = (id, dir) => {
+    const { pageIndex } = findBlock(id);
+    if (pageIndex < 0) return;
+    const zs = active.pages[pageIndex].blocks.map((b) => b.z || 0);
+    const z = dir === 'front' ? Math.max(0, ...zs) + 1 : Math.min(0, ...zs) - 1;
+    patchBlock(id, { z });
+  };
+
+  /** Step the block's type size, for a panel that needs to read bigger. */
+  const sizeBlock = (id, by) => editBlock(id, (b) => {
+    const now = b.style?.size || 10.5;
+    return { ...b, style: { ...b.style, size: Math.round((now + by) * 10) / 10 } };
+  });
+
+  const moveBlockToPage = (id, to) => {
+    setActive((d) => {
+      const pages = d.pages.map((p) => ({ ...p, blocks: [...p.blocks] }));
+      if (!pages[to]) return d;
+      let moved = null;
+      for (const p of pages) {
+        const i = p.blocks.findIndex((b) => b.id === id);
+        if (i >= 0) { [moved] = p.blocks.splice(i, 1); break; }
+      }
+      if (!moved) return d;
+      const bottom = pages[to].blocks.reduce(
+        (m, b) => Math.max(m, (b.y || 0) + (b.h || 0)), 0);
+      pages[to].blocks.push({ ...moved, y: bottom });
+      return { ...d, pages };
+    });
+  };
+
+  /* ------------------------------------------------------------ saving
+     Print still gives the PDF for the photocopier. Pictures are for
+     sharing: a syllabus goes to parents on WhatsApp far more often than it
+     goes through a printer, and a PDF is awkward there. */
+
+  async function saveImages(format, scale) {
+    const name = (mode === 'syllabus' ? 'syllabus' : (meta?.subject || 'paper'))
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'sheet';
+    try {
+      await exportSheets({
+        format,
+        scale,
+        name,
+        onProgress: (n, total) => setSaving(
+          total > 1 ? `Saving ${n} of ${total}…` : 'Saving…'),
+      });
+    } catch (e) {
+      setError(`Could not save the picture: ${e.message}`);
+    } finally {
+      setSaving('');
+    }
+  }
+
+  const saveItems = () => [
+    { label: 'Print or save as PDF', hint: 'Ctrl+P', onClick: () => window.print() },
+    'sep',
+    { label: 'Save as JPG', hint: 'one per page', onClick: () => saveImages('jpeg', 2) },
+    { label: 'Save as PNG', hint: 'sharper edges', onClick: () => saveImages('png', 2) },
+    {
+      label: 'Save as JPG, extra large',
+      hint: 'for printing',
+      onClick: () => saveImages('jpeg', 3),
+    },
+  ];
+
+  /** Build the menu for whichever block was right-clicked. */
+  function menuItems(id) {
+    const { block, pageIndex, top } = findBlock(id);
+    if (!block) return [];
+    const canvas = active.pages[pageIndex]?.mode === 'canvas' && top;
+    const text = block.content?.title || block.content?.text
+      || block.content?.school || '';
+
+    /* Pictures, where the block has one. A panel's picture is one of the
+       drawn spots; an image block takes anything from the library. */
+    const pictures = [];
+    if (block.type === 'image') {
+      pictures.push({
+        label: block.content.assetId ? 'Replace picture…' : 'Choose picture…',
+        onClick: () => setPicking({ blockId: id }),
+      });
+    }
+    if (block.type === 'masthead') {
+      pictures.push({
+        label: 'Replace monogram…',
+        onClick: () => setPicking({ blockId: id, field: 'monogramAssetId' }),
+      });
+    }
+    if (block.type === 'section') {
+      pictures.push({
+        label: 'Panel picture',
+        items: [
+          { label: 'Upload your own…', onClick: () => setPicking({ blockId: id }) },
+          { label: 'None', onClick: () => editBlock(id, (b) => ({
+            ...b, content: { ...b.content, spot: '', assetId: '', generate: '' } })) },
+          ...SPOT_IDS.map((sid) => ({
+            label: SPOTS[sid].name,
+            disabled: !block.content.assetId && block.content.spot === sid,
+            // Choosing a drawn one puts aside any uploaded picture.
+            onClick: () => editBlock(id, (b) => ({
+              ...b, content: { ...b.content, spot: sid, assetId: '', generate: '' } })),
+          })),
+        ],
+      });
+    }
+
+    return [
+      ...pictures,
+      pictures.length ? 'sep' : null,
+      { label: 'Duplicate', hint: 'Ctrl+D', onClick: () => duplicateBlock(id) },
+      { label: 'Delete', hint: 'Del', danger: true, onClick: () => deleteBlock(id) },
+      'sep',
+      { label: 'Bigger text', onClick: () => sizeBlock(id, 1) },
+      { label: 'Smaller text', onClick: () => sizeBlock(id, -1) },
+      canvas ? 'sep' : null,
+      canvas ? { label: 'Bring to front', onClick: () => orderBlock(id, 'front') } : null,
+      canvas ? { label: 'Send to back', onClick: () => orderBlock(id, 'back') } : null,
+      canvas && active.pages.length > 1 ? {
+        label: 'Move to page',
+        items: active.pages.map((_, i) => ({
+          label: `Page ${i + 1}`,
+          disabled: i === pageIndex,
+          onClick: () => moveBlockToPage(id, i),
+        })),
+      } : null,
+      text ? 'sep' : null,
+      text ? {
+        label: 'Copy text',
+        onClick: () => navigator.clipboard?.writeText(text).catch(() => {}),
+      } : null,
+    ].filter(Boolean);
+  }
 
   const mergeLibrary = (list) =>
     setAssets((cur) => {
@@ -425,9 +626,20 @@ export default function App() {
                 Answer key
               </label>
               <button className="ghost" onClick={startNew}>New</button>
-              <button className="primary small" onClick={() => window.print()}>
-                Print / PDF
-              </button>
+              <div className="save-menu">
+                <button
+                  className="primary small"
+                  disabled={Boolean(saving)}
+                  onClick={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect();
+                    setMenu({
+                      x: r.right - 190, y: r.bottom + 4, items: saveItems(),
+                    });
+                  }}
+                >
+                  {saving || 'Save or print ▾'}
+                </button>
+              </div>
             </>
           )}
         </div>
@@ -485,12 +697,33 @@ export default function App() {
 
       {urduKb && <UrduKeyboard onClose={() => setUrduKb(false)} />}
 
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menu.items || menuItems(menu.id)}
+          onClose={() => setMenu(null)}
+        />
+      )}
+
       {picking && (
         <AssetPicker
           onClose={() => setPicking(null)}
           onLibraryChange={mergeLibrary}
           onPick={(assetId) => {
-            if (picking.index != null) {
+            if (picking.rows) {
+              /* A picture-row carries its own picture, so it is indexed
+                 like a question's slots but lives under `rows`. */
+              editBlock(picking.blockId, (b) => ({
+                ...b,
+                content: {
+                  ...b.content,
+                  rows: b.content.rows.map((r, i) => (i === picking.index
+                    ? { ...r, assetId, generate: '', spot: '' } : r)),
+                },
+              }));
+              setPicking(null);
+            } else if (picking.index != null) {
               patchItem(picking.blockId, picking.index, { assetId, generate: '' });
             } else if (picking.blockId) {
               /* `field` lets a block hold more than one picture: the masthead
@@ -501,7 +734,7 @@ export default function App() {
                 ...b,
                 content: { ...b.content, [field]: assetId, generate: '' },
               }));
-              if (picking.field) setPicking(null); // one slot, one choice
+              setPicking(null); // one slot, one choice
             }
           }}
         />
@@ -542,6 +775,7 @@ export default function App() {
               onOpenPicker={setPicking}
               tool={tool}
               onTool={setTool}
+              onStartTemplate={mode === 'syllabus' ? loadSyllabusTemplate : undefined}
             />
           ) : view === 'edit' && active ? (
             <Editor doc={active} setDoc={setActive} onRevise={revise} busy={busy} />
@@ -576,6 +810,8 @@ export default function App() {
                   tool,
                   onDraw: drawShape,
                   onMoveDrawn: moveDrawn,
+                  onMenu: (id, x, y) => { select(id); setMenu({ id, x, y }); },
+                  onEditBlock: editBlock,
                 }}
               />
             </div>

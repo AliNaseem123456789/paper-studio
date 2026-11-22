@@ -22,6 +22,8 @@ export const BLOCK_TYPES = {
   figure:   'Diagram (keyboard, clock, number line)',
   masthead: 'Syllabus masthead',
   notebox:  'Footer note',
+  bubble:   'Speech bubble',
+  iconrows: 'Picture rows',
   shape:    'Shape',
   lines:    'Writing lines',
   answer:   'Answer space',
@@ -146,7 +148,11 @@ export function normaliseBlock(b, index = 0, canvas = false) {
         title: str(b.content?.title ?? b.title),
         accent: str(b.content?.accent ?? b.accent),
         number: str(b.content?.number),
+        /* The panel's picture: one of the drawn spots, or -- when the
+           school has its own artwork -- an uploaded asset, which wins. */
         spot: str(b.content?.spot),
+        assetId: str(b.content?.assetId),
+        generate: str(b.content?.generate),
         blocks: arr(b.content?.blocks ?? b.blocks)
           .map((c, k) => normaliseBlock(c, k, false)).filter(Boolean),
       };
@@ -245,6 +251,38 @@ export function normaliseBlock(b, index = 0, canvas = false) {
         spotRight: str(b.content?.spotRight) || 'book-stack',
         accent: str(b.content?.accent),
         pill: str(b.content?.pill),
+        // 'ribbon' is the school's printed sheet; 'pills' the poster.
+        variant: b.content?.variant === 'pills' ? 'pills' : 'ribbon',
+      };
+      break;
+
+    /* A callout drawn as a speech bubble or a cloud -- "Let's Talk!",
+       "Learn Grow Shine". Decoration with words in it, so it carries its
+       own colour and the side its tail points. */
+    case 'bubble':
+      out.content = {
+        text: str(b.content?.text),
+        shape: ['speech', 'cloud', 'burst'].includes(b.content?.shape)
+          ? b.content.shape : 'speech',
+        tail: ['left', 'right', 'none'].includes(b.content?.tail)
+          ? b.content.tail : 'left',
+        colour: str(b.content?.colour),
+      };
+      break;
+
+    /* Rows of picture + label + list, the shape the Nature Study panel
+       takes: a little icon, "Transport:", then the words in a box. */
+    case 'iconrows':
+      out.content = {
+        heading: str(b.content?.heading),
+        rows: (Array.isArray(b.content?.rows) ? b.content.rows : []).map((r) => ({
+          spot: str(r?.spot),
+          // An uploaded or generated picture for this row, instead of a spot.
+          assetId: str(r?.assetId),
+          generate: str(r?.generate),
+          label: str(r?.label),
+          text: str(r?.text),
+        })),
       };
       break;
 
@@ -409,7 +447,7 @@ export function referencedAssets(doc) {
     const c = b?.content || {};
     if (c.assetId) out.add(c.assetId);
     if (c.monogramAssetId) out.add(c.monogramAssetId);
-    for (const key of ['items', 'left', 'blocks']) {
+    for (const key of ['items', 'left', 'blocks', 'rows']) {
       for (const it of arr(c[key])) {
         if (it?.assetId) out.add(it.assetId);
         if (it?.content) walk(it);

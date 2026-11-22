@@ -35,6 +35,15 @@ export const TEMPLATES = {
     doc: { pages: [{ mode: 'canvas', blocks: alsehar() }] },
   },
 
+  'syllabus-poster-kg': {
+    name: 'Syllabus — Poster (KG)',
+    kind: 'syllabus',
+    theme: 'poster',
+    hint: 'Pastel panels of mixed widths, speech bubbles, picture rows. '
+        + 'The busier wall-poster version.',
+    doc: { pages: poster() },
+  },
+
   'syllabus-3col': {
     name: 'Syllabus — 3 Column',
     kind: 'syllabus',
@@ -195,6 +204,143 @@ function alsehar() {
       },
     },
   ];
+}
+
+/**
+ * The wall-poster syllabus: panels of unequal width, speech bubbles in the
+ * gaps, and the nature list as picture rows. Deliberately not a uniform
+ * grid -- a long subject gets a wide panel and a short one sits beside it.
+ *
+ * Two sheets, because this much content at a size a five-year-old's parent
+ * can read across the room does not fit on one A4. A page is 22 rows of
+ * 11mm, and every block below is placed inside that.
+ */
+function poster() {
+  const panel = (n, title, x, y, w, h, accent, spot, items) => ({
+    type: 'section', x, y, w, h,
+    content: {
+      title, accent, number: String(n), spot,
+      blocks: [{ type: 'list', content: { items: items.map((text) => ({ text })) } }],
+    },
+  });
+
+  const bubble = (text, x, y, w, h, colour, shape = 'speech', tail = 'left') => ({
+    type: 'bubble', x, y, w, h, content: { text, colour, shape, tail },
+  });
+
+  const page1 = [
+    {
+      type: 'masthead', x: 0, y: 0, w: 12, h: 4,
+      content: {
+        school: 'AL-SEHAR ACADEMY',
+        term: 'Final Semester 2026\u201327',
+        title: 'Syllabus',
+        forLabel: 'for',
+        className: 'KG-II',
+        variant: 'pills',
+        spotRight: 'abc-blocks',
+        accent: '#17365d',
+        pill: '#e64980',
+      },
+    },
+
+    panel(1, 'Oxford Modern English', 0, 4, 8, 10, '#e64980', 'open-book', [
+      'Page No. 25 to 53',
+      'Write Aa to Zz, prepositions (in, on, behind, in front, under)',
+      'Animal names, vegetable names, singular and plural, opposites',
+      'Uses of This and That, make sentences (car, fish, mango)',
+      'Who are you? What is your name? Fill in the blanks',
+      'Essay: My School Bag. Read and write words with -ing',
+      'This, These, That, Those. Me and My Family. My Self',
+    ]),
+    panel(2, 'Spectrum English Workbook', 8, 4, 4, 5, '#1971c2', 'book-stack', [
+      'Level 2: page No. 63 to 144',
+      'All exercises according to the book',
+    ]),
+    bubble('Learn\nGrow\nShine', 8, 9, 4, 5, '#dbe9ff', 'cloud', 'none'),
+
+    panel(3, 'Mathematics', 0, 14, 8, 8, '#2f9e44', 'numbers-123', [
+      'Learn by heart 201 to 300',
+      'Backward counting 200 to 101, inwards counting 21 to 30',
+      'Tables 4 and 5, dodging tables 2 to 5',
+      'Shapes: triangle, circle, oval, square. Fill in the blanks',
+      'Addition, subtraction, time',
+      'Mathematics for KG-II: page No. 62 to 134, all exercises',
+      'Drawing: straight lines, match the dots, colour the objects',
+    ]),
+    panel(4, 'Writing and Drawing', 8, 14, 4, 8, '#f08c00', 'pencil-cup', [
+      'Reading, writing and dictation',
+      'Identify and name the primary colours',
+      'Thumb painting',
+    ]),
+  ];
+
+  const page2 = [
+    panel(5, 'General Conversation', 0, 0, 6, 9, '#1098ad', 'note', [
+      'What is your name? What is your father\u2019s name?',
+      'What is the name of your school? In which class do you study?',
+      'What is your class teacher\u2019s name? Where do you live?',
+      'How old are you? Who are you?',
+      'How do we see, hear and smell? How many eyes do you have?',
+      'Tell the parts of a day. How many fingers do you have?',
+    ]),
+    panel(6, 'General Knowledge', 6, 0, 6, 9, '#7048e8', 'globe', [
+      'Which animal is the king of animals? (Lion)',
+      'Which bird gives us eggs? (Duck, hen)',
+      'Who delivers the letters? (Postman)',
+      'Who flies an aeroplane? (Pilot)',
+      'Who takes care of our country? (Soldier)',
+      'Where was Quaid-e-Azam born? (25 December 1876)',
+      'Which animal is called the ship of the desert? (Camel)',
+      'Which is the biggest city of Pakistan? (Karachi)',
+    ]),
+
+    panel(7, 'Good Manners', 0, 9, 9, 6.5, '#f76707', 'blocks', [
+      'When a teacher comes into your class, what would you say? (Good morning)',
+      'Always say Bismillah before you start any work',
+      'Always say Assalam-o-Alaikum when you meet someone',
+      'When do you say sorry, thank you, excuse me?',
+      'How to make a queue. How to get permission',
+      'When you come into your class, what would you ask? (May I come in)',
+    ]),
+    bubble('Good\nMorning!', 9, 9, 3, 3, '#d3f9d8', 'speech', 'left'),
+    bubble('Thank\nYou!', 9, 12, 3, 3, '#ffdeeb', 'speech', 'right'),
+
+    {
+      type: 'section', x: 0, y: 15, w: 12, h: 7,
+      content: {
+        title: 'Nature Study', accent: '#2f9e44', number: '8', spot: '',
+        blocks: [
+          {
+            type: 'iconrows',
+            content: {
+              heading: 'November to December',
+              rows: [
+                { spot: 'note', label: 'Parts of body:', text: 'head, hair, nose, eye, arm, hand' },
+                { spot: 'blocks', label: 'Shapes:', text: 'line, angle, square, circle, cone, oval' },
+                { spot: 'lion', label: 'Birds:', text: 'hawk, eagle, ostrich, crow, crane, dove' },
+                { spot: 'globe', label: 'Sports:', text: 'cricket, hockey, football, tennis' },
+              ],
+            },
+          },
+          {
+            type: 'iconrows',
+            content: {
+              heading: 'January to March',
+              rows: [
+                { spot: 'train', label: 'Transport:', text: 'aeroplane, car, van, train, truck' },
+                { spot: 'globe', label: 'Climate:', text: 'summer, winter, autumn, spring, rainy' },
+                { spot: 'palette', label: 'Colours:', text: 'white, black, yellow, orange, red, blue' },
+                { spot: 'abacus', label: 'Fruits:', text: 'apple, mango, orange, banana, grapes' },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ];
+
+  return [{ mode: 'canvas', blocks: page1 }, { mode: 'canvas', blocks: page2 }];
 }
 
 function sec(title, x, y, w, h, accent) {

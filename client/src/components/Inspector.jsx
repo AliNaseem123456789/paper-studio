@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../lib/api.js';
 import { SHAPE_IDS, SHAPES, resolveShape } from './blocks/shapes.js';
 import { ShapeIcon } from './blocks/Shape.jsx';
 import { FIGURE_IDS, FIGURES } from './blocks/Figures.jsx';
@@ -61,6 +62,30 @@ function panelRows(block, w) {
   return Math.max(4, Math.ceil((mm + 6) / ROW_MM));
 }
 
+/** Find a block by id at any depth: panels carry their own child blocks. */
+function deepFind(blocks, id) {
+  if (!id) return null;
+  for (const b of blocks) {
+    if (b.id === id) return b;
+    if (Array.isArray(b.content?.blocks)) {
+      const hit = deepFind(b.content.blocks, id);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/** Replace one block wherever it sits, leaving the rest of the tree alone. */
+function deepMap(blocks, id, fn) {
+  return blocks.map((b) => {
+    if (b.id === id) return fn(b);
+    if (Array.isArray(b.content?.blocks)) {
+      return { ...b, content: { ...b.content, blocks: deepMap(b.content.blocks, id, fn) } };
+    }
+    return b;
+  });
+}
+
 /* Blocks pinned outside the panel grid: the masthead on top, notes below. */
 const TOP = ['masthead'];
 const BOTTOM = ['notebox'];
@@ -115,12 +140,71 @@ const ADDABLE = [
   ['image', 'Picture', '🖼'],
   ['figure', 'Diagram', '⌨'],
   ['notebox', 'Footer note', '📌'],
+  ['bubble', 'Speech bubble', '💬'],
+  ['iconrows', 'Picture rows', '🏷'],
   ['answer', 'Answer space', '✍'],
   ['lines', 'Writing lines', '≡'],
   ['spacer', 'Blank space', '⇕'],
   ['shape', 'Shape', '◻'],
   ['divider', 'Divider', '—'],
 ];
+
+/**
+ * Editing for one picture-rows list: a heading, then a picture, a label and
+ * the words for each row.
+ */
+function IconRowsEditor({ content, onChange, onPickRow }) {
+  const rows = content.rows || [];
+  const setRow = (i, p) => onChange({
+    rows: rows.map((x, n) => (n === i ? { ...x, ...p } : x)),
+  });
+  return (
+    <>
+      <label className="full">
+        Heading
+        <input value={content.heading || ''} dir="auto"
+               onChange={(e) => onChange({ heading: e.target.value })} />
+      </label>
+      {rows.map((r, i) => (
+        <div className="row-edit" key={i}>
+          <div className="row-edit-top">
+            {r.assetId || r.generate ? (
+              <button
+                className="chip on"
+                title="This row uses your own picture"
+                onClick={() => setRow(i, { assetId: '', generate: '' })}
+              >own picture ×</button>
+            ) : (
+              <select value={r.spot || ''} onChange={(e) => setRow(i, { spot: e.target.value })}>
+                <option value="">no picture</option>
+                {SPOT_IDS.map((id) => (
+                  <option key={id} value={id}>{SPOTS[id].name}</option>
+                ))}
+              </select>
+            )}
+            {onPickRow && (
+              <button className="chip" title="Upload or choose a picture"
+                      onClick={() => onPickRow(i)}>⬆</button>
+            )}
+            <input value={r.label || ''} dir="auto" placeholder="Transport:"
+                   onChange={(e) => setRow(i, { label: e.target.value })} />
+            <button
+              className="blk-row-x"
+              title="Remove this row"
+              onClick={() => onChange({ rows: rows.filter((_, n) => n !== i) })}
+            >×</button>
+          </div>
+          <input value={r.text || ''} dir="auto" placeholder="car, van, train"
+                 onChange={(e) => setRow(i, { text: e.target.value })} />
+        </div>
+      ))}
+      <button
+        className="chip on"
+        onClick={() => onChange({ rows: [...rows, { spot: '', label: '', text: '' }] })}
+      >+ Row</button>
+    </>
+  );
+}
 
 /** A labelled −/+ stepper. Faster than typing for the things teachers nudge. */
 function Stepper({ label, value, onChange, min = 1, max = 40, step = 1, suffix = '' }) {
@@ -141,20 +225,40 @@ const PALETTE = ['#1f7a3d', '#2563c9', '#b8560f', '#8e3bb0',
                  '#c0392b', '#0f8f98', '#5a7a1f', '#a4307a'];
 
 let n = 0;
-const uid = () => `b${Date.now().toString(36)}${(n++).toString(36)}`;
+const uid = (p = 'b') => `${p}${Date.now().toString(36)}${(n++).toString(36)}`;
 
 /** Editing for whichever block is selected, plus the add-block palette. */
 export default function Inspector({
   doc, setDoc, sel, onSelect, onPatchItem, onLibrary, onOpenPicker,
-  tool, onTool,
+  tool, onTool, onStartTemplate,
 }) {
+  const [starters, setStarters] = useState([]);
+  useEffect(() => {
+    if (!onStartTemplate) return;
+    apiFetch('/api/templates')
+      .then((r) => r.json())
+      .then((b) => setStarters((b.list || []).filter((t) => t.kind === 'syllabus')))
+      .catch(() => {});
+  }, [onStartTemplate]);
+
   const selectedId = sel?.blockId || null;
   const itemIndex = sel?.itemIndex;
 
-  const page = doc.pages[0] || { blocks: [], mode: 'flow' };
+  /* Which page the panel is editing. A selection wins -- select something on
+     page 2 and the controls follow it -- otherwise it is whichever page the
+     teacher last clicked a tab for. */
+  const [pageTab, setPageTab] = useState(0);
+  const held = doc.pages.findIndex((p) => p.blocks.some((b) => b.id === selectedId));
+  const pageIndex = held >= 0 ? held : Math.min(pageTab, doc.pages.length - 1);
+
+  const page = doc.pages[pageIndex] || { blocks: [], mode: 'flow' };
   const canvas = page.mode === 'canvas';
   const index = page.blocks.findIndex((b) => b.id === selectedId);
-  const block = index >= 0 ? page.blocks[index] : null;
+  /* A block inside a panel is selectable too, so the search goes down into
+     children. `index` stays the top-level position, and is -1 for a nested
+     block -- the handful of controls that reorder blocks check for that. */
+  const block = index >= 0 ? page.blocks[index] : deepFind(page.blocks, selectedId);
+  const isNested = Boolean(block) && index < 0;
 
   // Which collection a question's pictures live in.
   const itemsKey = block?.content?.items ? 'items'
@@ -165,19 +269,56 @@ export default function Inspector({
   const write = (fn) =>
     setDoc((d) => {
       const pages = [...d.pages];
-      pages[0] = { ...pages[0], blocks: fn([...pages[0].blocks]) };
+      const i = Math.min(pageIndex, pages.length - 1);
+      pages[i] = { ...pages[i], blocks: fn([...pages[i].blocks]) };
       return { ...d, pages };
     });
 
-  const patch = (p) => write((bs) => {
-    bs[index] = { ...bs[index], ...p };
-    return bs;
-  });
+  /* ------------------------------------------------------------- pages
+     A syllabus that outgrows one sheet spills onto a second. Rebalancing
+     then means moving a panel across, which no amount of dragging can do:
+     a block belongs to a page. */
 
-  const patchContent = (p) => write((bs) => {
-    bs[index] = { ...bs[index], content: { ...bs[index].content, ...p } };
-    return bs;
-  });
+  function movePage(blockId, to) {
+    setDoc((d) => {
+      const pages = d.pages.map((p) => ({ ...p, blocks: [...p.blocks] }));
+      if (!pages[to]) return d;
+      let moved = null;
+      for (const p of pages) {
+        const i = p.blocks.findIndex((b) => b.id === blockId);
+        if (i >= 0) { [moved] = p.blocks.splice(i, 1); break; }
+      }
+      if (!moved) return d;
+      // Lands at the foot of the target page, full width of its column span.
+      const bottom = pages[to].blocks.reduce((m, b) => Math.max(m, (b.y || 0) + (b.h || 0)), 0);
+      pages[to].blocks.push({ ...moved, y: bottom });
+      return { ...d, pages };
+    });
+    setPageTab(to);
+  }
+
+  function addPage() {
+    setDoc((d) => ({
+      ...d,
+      pages: [...d.pages, { id: uid('p'), mode: page.mode, blocks: [] }],
+    }));
+    setPageTab(doc.pages.length);
+  }
+
+  function removePage(i) {
+    if (doc.pages.length < 2) return;
+    setDoc((d) => ({ ...d, pages: d.pages.filter((_, n) => n !== i) }));
+    setPageTab(Math.max(0, i - 1));
+    onSelect?.(null);
+  }
+
+  /* By id, not by position: the selected block may be nested inside a
+     panel, where there is no top-level index to write to. */
+  const patch = (p) => write((bs) => deepMap(bs, selectedId, (b) => ({ ...b, ...p })));
+
+  const patchContent = (p) => write((bs) => deepMap(bs, selectedId, (b) => ({
+    ...b, content: { ...b.content, ...p },
+  })));
 
   function add(type) {
     const b = {
@@ -206,6 +347,11 @@ export default function Inspector({
       case 'image':   return { assetId: '', generate: '', fit: 'contain' };
       case 'figure':  return { kind: 'keyboard', opts: {}, height: null };
       case 'notebox': return { label: 'Note', text: 'Type the note here.' };
+      case 'bubble':  return { text: 'Well done!', shape: 'speech', tail: 'left',
+                               colour: '#dbe9ff' };
+      case 'iconrows': return { heading: 'November to December',
+                                rows: [{ spot: 'lion', label: 'Animals:',
+                                         text: 'lion, camel, giraffe' }] };
       case 'lines':   return { count: 3, gap: 8 };
       case 'answer':  return { variant: 'lines', count: 4, gap: 9, height: 30, cell: 6, label: '' };
       case 'spacer':  return { height: 10 };
@@ -276,7 +422,7 @@ export default function Inspector({
    * at the heights the text really needs. Fonts, Urdu, pictures and
    * wrapping all land here for free, where no formula would get them right.
    */
-  function fitHeights(cols) {
+  function fitHeights(cols, pass = 0) {
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const grown = new Map();
       for (const cell of document.querySelectorAll('.grid-page .grid-cell[data-block]')) {
@@ -299,6 +445,10 @@ export default function Inspector({
         cols,
         (b) => b.h || 4,
       ));
+      /* Growing a block can change what fits inside it -- a line that no
+         longer needs to wrap, a picture that stops being squeezed -- so
+         look once more. Twice is enough; it converges from above. */
+      if (pass < 1) fitHeights(cols, pass + 1);
     }));
   }
 
@@ -322,6 +472,7 @@ export default function Inspector({
   }
 
   function order(dir) {
+    if (isNested) return;   // reordering is a top-level idea
     write((bs) => {
       const j = index + dir;
       if (j < 0 || j >= bs.length) return bs;
@@ -367,7 +518,46 @@ export default function Inspector({
 
       {canvas && (
         <>
-          <h2 className="panel-title">Panels on this sheet</h2>
+          {onStartTemplate && (
+            <>
+              <h2 className="panel-title">Start from</h2>
+              <div className="chip-row">
+                {starters.map((t) => (
+                  <button
+                    key={t.id}
+                    className={doc.template === t.id ? 'chip on' : 'chip'}
+                    title={`${t.hint} — replaces what is on the sheet`}
+                    onClick={() => {
+                      if (doc.template === t.id) return;
+                      // eslint-disable-next-line no-alert
+                      if (window.confirm(
+                        `Start again from "${t.name}"? This replaces the panels `
+                        + 'on this syllabus.')) onStartTemplate(t.id);
+                    }}
+                  >{t.name.replace(/^Syllabus — /, '')}</button>
+                ))}
+              </div>
+            </>
+          )}
+
+          <h2 className="panel-title">Sheets</h2>
+          <div className="chip-row">
+            {doc.pages.map((_, i) => (
+              <button
+                key={i}
+                className={i === pageIndex ? 'chip on' : 'chip'}
+                onClick={() => { setPageTab(i); onSelect?.(null); }}
+              >Page {i + 1}</button>
+            ))}
+            <button className="chip" onClick={addPage}>+ Page</button>
+            {doc.pages.length > 1 && (
+              <button className="chip" onClick={() => removePage(pageIndex)}>
+                Delete page {pageIndex + 1}
+              </button>
+            )}
+          </div>
+
+          <h2 className="panel-title">On page {pageIndex + 1}</h2>
 
           <div className="blk-list">
             {page.blocks.filter((b) => !(b.type === 'shape' && b.content.overlay))
@@ -384,6 +574,19 @@ export default function Inspector({
                     : (b.content?.title || b.content?.label
                        || BLOCK_LABEL[b.type] || b.type)}
                 </span>
+                {doc.pages.length > 1 && (
+                  <select
+                    className="blk-row-page"
+                    title="Move to another page"
+                    value={pageIndex}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => movePage(b.id, Number(e.target.value))}
+                  >
+                    {doc.pages.map((_, i) => (
+                      <option key={i} value={i}>p{i + 1}</option>
+                    ))}
+                  </select>
+                )}
                 <button
                   className="blk-row-x"
                   title="Remove from this sheet"
@@ -649,6 +852,68 @@ export default function Inspector({
             </>
           )}
 
+          {block.type === 'bubble' && (
+            <>
+              <label className="full">
+                Words
+                <textarea rows={2} value={block.content.text || ''} dir="auto"
+                          onChange={(e) => patchContent({ text: e.target.value })} />
+              </label>
+              <p className="hint">A line break puts the next word underneath.</p>
+              <h3 className="panel-title">Shape</h3>
+              <div className="chip-row">
+                {[['speech', 'Speech'], ['cloud', 'Cloud'], ['burst', 'Star burst']]
+                  .map(([id, name]) => (
+                    <button
+                      key={id}
+                      className={block.content.shape === id ? 'chip on' : 'chip'}
+                      onClick={() => patchContent({ shape: id })}
+                    >{name}</button>
+                  ))}
+              </div>
+              <h3 className="panel-title">Pointer</h3>
+              <div className="chip-row">
+                {[['left', 'Left'], ['right', 'Right'], ['none', 'None']].map(([id, name]) => (
+                  <button
+                    key={id}
+                    className={block.content.tail === id ? 'chip on' : 'chip'}
+                    onClick={() => patchContent({ tail: id })}
+                  >{name}</button>
+                ))}
+              </div>
+              <label>
+                Colour
+                <input type="color" value={block.content.colour || '#e7f1ff'}
+                       onChange={(e) => patchContent({ colour: e.target.value })} />
+              </label>
+            </>
+          )}
+
+          {block.type === 'iconrows' && (
+            <IconRowsEditor
+              content={block.content}
+              onChange={patchContent}
+              onPickRow={(i) => onOpenPicker({ blockId: block.id, index: i, rows: true })}
+            />
+          )}
+
+          {/* A panel can hold picture-row lists -- the Nature Study one holds
+              two. They are children of the panel, so they are edited here
+              rather than being separately selectable on the page. */}
+          {block.type === 'section'
+            && block.content.blocks?.some((c) => c.type === 'iconrows')
+            && block.content.blocks.map((c, i) => (c.type !== 'iconrows' ? null : (
+              <IconRowsEditor
+                key={c.id || i}
+                content={c.content}
+                onChange={(p) => patchContent({
+                  blocks: block.content.blocks.map((x, n) => (n === i
+                    ? { ...x, content: { ...x.content, ...p } } : x)),
+                })}
+                onPickRow={(row) => onOpenPicker({ blockId: c.id, index: row, rows: true })}
+              />
+            )))}
+
           {block.type === 'section' && (
             <>
               <label className="full">
@@ -681,11 +946,33 @@ export default function Inspector({
               </div>
 
               <h3 className="panel-title">Panel picture</h3>
-              <SpotPicker value={block.content.spot}
-                          onPick={(spot) => patchContent({ spot })} />
+              {(block.content.assetId || block.content.generate) ? (
+                <>
+                  <button
+                    className="primary"
+                    onClick={() => onOpenPicker({ blockId: block.id })}
+                  >Replace picture…</button>
+                  <button
+                    className="chip"
+                    style={{ marginTop: 6 }}
+                    onClick={() => patchContent({ assetId: '', generate: '' })}
+                  >Back to a drawn picture</button>
+                </>
+              ) : (
+                <>
+                  <SpotPicker value={block.content.spot}
+                              onPick={(spot) => patchContent({ spot })} />
+                  <button
+                    className="chip"
+                    style={{ marginTop: 6 }}
+                    onClick={() => onOpenPicker({ blockId: block.id })}
+                  >Upload your own…</button>
+                </>
+              )}
               <p className="hint">
-                Edit the panel's own content by selecting it on the page, or ask
-                for a change in the Content tab.
+                Your own artwork — a PNG or SVG from Figma or Canva — replaces
+                the drawn picture. Clicking the picture on the page opens the
+                same chooser.
               </p>
             </>
           )}

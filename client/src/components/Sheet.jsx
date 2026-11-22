@@ -100,6 +100,7 @@ function Page({ page, doc, assets, showAnswers, first, tokens, edit }) {
               onSelect={(id) => edit?.onSelect?.(id, null)}
               onChange={edit?.onChange}
               onDelete={edit?.onDelete}
+              onMenu={edit?.onMenu}
             >
               <Block b={b} assets={assets} showAnswers={showAnswers} />
             </Moveable>
@@ -191,6 +192,12 @@ function FlowBlock({ b, index, assets, showAnswers, edit }) {
         e.stopPropagation();
         edit.onSelect?.(b.id, null);
       }}
+      onContextMenu={(e) => {
+        if (!edit.onMenu) return;
+        e.preventDefault();
+        e.stopPropagation();
+        edit.onMenu(b.id, e.clientX, e.clientY);
+      }}
     >
       <span className="flow-grip" title="Drag to reorder">⠿</span>
       <Block b={b} assets={assets} showAnswers={showAnswers} />
@@ -221,6 +228,9 @@ export default function Sheet({ doc, themes, assets, showAnswers = false, edit }
     moveItem: edit?.onMoveItem,
     openPicker: edit?.onOpenPicker,
     moveBlock: edit?.onMoveBlock,
+    // For blocks nested inside a panel, which have no Moveable of their own.
+    menu: edit?.onMenu,
+    editBlock: edit?.onEditBlock,
   }), [edit]);
 
   return (

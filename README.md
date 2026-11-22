@@ -166,6 +166,49 @@ a numbered one in the next colour. **Arrange in 1â€“4 columns** re-flows the
 panels into an even grid, keeping the masthead on top and the note at the
 bottom, and leaving drawn shapes where they were drawn.
 
+**Sheets.** A syllabus that outgrows one page gets another: the Layout tab
+lists the pages, adds and removes them, and every block can be moved across
+with the little page selector beside it or from the right-click menu. A moved
+block lands at the foot of the page it arrives on.
+
+**Panels scale with their own width.** A panel is a CSS container, so its
+heading, body, number badge and illustration are all sized in `cqw` -- a
+percentage of the panel's width -- between clamps. Drag a panel narrower and
+the text and the picture shrink with it instead of wrapping into a tall thin
+column. Flow pages are untouched, because only `.grid-cell` makes a container.
+
+**Panel pictures can be your own.** A panel and each picture row take
+either one of the drawn spots or an uploaded asset, and the upload wins
+while it is set -- clearing it brings the drawn one back rather than
+leaving a hole. Click the picture on the sheet, use the Layout tab, or
+right-click the panel; all three open the same chooser, which uploads a PNG
+or SVG, picks from the library, or generates one. The picture is referenced
+by slug like every other asset, so swapping it never disturbs the panel.
+
+**Everything inside a panel is a target.** A list, a picture-row set, any
+child block: click to select it and the Layout tab edits that child rather
+than the whole panel. The Inspector finds a block by id at any depth, so a
+nested block saves itself without knowing where it lives.
+
+**Double-click text to retype it** -- a bullet, a heading, a paragraph, a
+panel title or number, a speech bubble, a picture-row label, the footer note.
+Enter or clicking away saves; Escape puts the original back. The field is
+deliberately uncontrolled while open: re-rendering a contentEditable on every
+keystroke fights the caret and it jumps to the start of the line, so the DOM
+holds the text during the edit and the document is written once at the end.
+
+Note that a canvas block starts its drag on pointerdown, which calls
+`preventDefault` -- that was eating the click and double-click of everything
+inside it. Moveable now leaves the pointer alone when it lands on a nested
+block, editable text or a picture. Panels still drag by their heading, their
+padding and their handles.
+
+**Right-click** anything on the sheet for duplicate, delete, bigger and
+smaller text, front and back, move to page, and copy text -- plus the
+pictures: replace the one in an image block, swap the school monogram, or
+pick a panel's illustration from a submenu of all of them. The same actions
+are in the Layout tab; this is them where the hand already is.
+
 Row heights are **estimated, then measured**: `panelRows()` gets the first
 pass roughly right, the browser draws it, and a second pass reads the real
 overflow out of the DOM and lays out again. Urdu, wrapping, fonts and panel
@@ -522,6 +565,48 @@ whole conversation and token use grows quadratically with the number of turns â€
 the usual way a chat loop quietly burns through a TPM limit. The budget is
 3000 approximate tokens; raise it in `trimHistory` if replies start losing
 earlier context.
+
+### A second syllabus template
+
+`syllabus-poster-kg` is the busier wall-poster version: panels of unequal
+width, a cloud and two speech bubbles, and the nature list as picture rows.
+It brings two block types with it.
+
+- **`bubble`** -- a callout as a speech bubble, cloud or star burst, in any
+  colour, with the pointer on either side or off. Drawn in CSS so it takes a
+  colour and scales with its box. The pointer is a *sibling* of the bubble,
+  not a child: a rotated box hanging below its parent counts towards that
+  parent's scroll height, and the fit pass would grow the block for ever
+  chasing a decoration.
+- **`iconrows`** -- picture, label, then the words, which is how the Nature
+  Study panel is set. Two of them inside one panel render as two columns.
+
+It is two pages, not one. A page is 22 rows of 11mm, and this much content at
+a size a parent can read across the room does not fit on one A4; the heights
+were measured from the rendered sheet rather than guessed.
+
+## Saving a sheet
+
+**Save or print** in the toolbar offers four things:
+
+| | |
+| --- | --- |
+| Print or save as PDF | the browser's own dialog; right for the photocopier |
+| Save as JPG | one file per page at ~190dpi |
+| Save as PNG | the same, sharper on edges and lettering |
+| Save as JPG, extra large | 3x, when it is going to be printed large |
+
+A syllabus reaches parents on WhatsApp far more often than it reaches a
+printer, and a PDF is awkward there, so the images are the common case.
+
+Pictures are captured from the live DOM with `html-to-image`, which means
+the editing chrome has to go first: `body.exporting` turns off exactly what
+`@media print` turns off -- guides, handles, selection outlines, hover
+tints -- and is removed again in a `finally`, so a failed capture cannot
+leave the editor stripped. JPEG has no transparency, hence the explicit
+white background; without it the paper comes out black. Multi-page
+documents save one file per page, spaced apart, because browsers drop
+downloads fired in the same tick.
 
 ## Deploying
 
